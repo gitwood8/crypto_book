@@ -1,0 +1,12 @@
+# .air.toml
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go run ./telegram_bot/main.go"
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "vendor", "store"]
+  exclude_file = []
+  follow_symlink = true
+  send_interrupt = true
+
