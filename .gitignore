@@ -2,3 +2,7 @@
 .idea/
 .vscode/
 *.log
+IMPORTANT_NOTES
+/pg_data
+/bin
+/.build
