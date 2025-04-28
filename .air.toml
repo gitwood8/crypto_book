@@ -1,12 +1,36 @@
 # .air.toml
 root = "."
-tmp_dir = "tmp"
+tmp_dir = ".tmp"
 
 [build]
-  cmd = "go run ./telegram_bot/main.go"
-  include_ext = ["go"]
-  exclude_dir = ["tmp", "vendor", "store"]
-  exclude_file = []
-  follow_symlink = true
-  send_interrupt = true
+# Just plain old shell command. You could use `make` as well.
+    cmd = "make build-service"
+    
+# Binary file yields from `cmd`.
+    bin = "/app/wood_post"
+    full_bin = "bin/wood_post"
 
+    include_ext = ["go"]
+    exclude_dir = [".tmp", "migrations"]
+    exclude_file = ["IMPORTANT_NOTES"]
+    follow_symlink = true
+    send_interrupt = true
+# It's not necessary to trigger build each time file changes if it's too frequent.
+    delay = 1000 # ms
+# This log file places in your tmp_dir.
+    log = "air_errors.log"
+
+[log]
+# Show log time
+time = true
+
+[misc]
+# Delete tmp directory on exit
+clean_on_exit = true
+
+[color]
+# Customize each part's color. If no color found, use the raw app log.
+main = "magenta"
+watcher = "cyan"
+build = "yellow"
+runner = "green"

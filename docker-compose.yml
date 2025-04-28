@@ -1,3 +1,38 @@
-env_file:
-  - .env
+version: "3.9"  # Обновляем версию!
 
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: crypto_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  bot:
+    build:
+      context: .
+      # target: dev
+      dockerfile: Dockerfile
+    # image: wood_post:dev
+    container_name: wood_post
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+volumes:
+  pg_data:

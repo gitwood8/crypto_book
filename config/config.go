@@ -3,6 +3,8 @@ package config
 import (
 	"log"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -15,12 +17,14 @@ type Config struct {
 }
 
 func Load() *Config {
+	_ = godotenv.Load(".env") // загружаем .env, если он есть
+
 	cfg := &Config{
 		TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
 		DBHost:           os.Getenv("DB_HOST"),
 		DBPort:           os.Getenv("DB_PORT"),
 		DBUser:           os.Getenv("DB_USER"),
-		DBPassword:       os.Getenv("DB_PASSWORD"),
+		DBPassword:       os.Getenv("DB_PASS"),
 		DBName:           os.Getenv("DB_NAME"),
 	}
 
@@ -29,4 +33,3 @@ func Load() *Config {
 	}
 	return cfg
 }
-
