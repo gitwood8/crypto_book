@@ -26,6 +26,8 @@ func New(user, password, host, port, dbname string) (*Store, error) {
 		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		user, password, host, port, dbname,
 	)
+
+	// log.Info(connStr)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("db open connection error: %w", err)
