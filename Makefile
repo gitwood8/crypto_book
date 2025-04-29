@@ -4,7 +4,7 @@ PATH             := $(GOBIN):$(PATH)
 PROJECT_NAME     = wood_post
 M                = $(shell printf "\033[34;1m>>\033[0m")
 
-export GOOSE_MIGRATION_DIR = /app/migrations/
+export GOOSE_MIGRATION_DIR = ./migrations/
 export GOOSE_DBSTRING      = $(STORAGE_MIGRATION_DSN)
 export GOOSE_DRIVER        = postgres
 
@@ -17,7 +17,8 @@ build-service:
 	$(GO) build -o $(GOBIN)/$(PROJECT_NAME) ./cmd/service/*.go
 
 watch:
-	@go install github.com/air-verse/air@latest
+# @go install github.com/air-verse/air@latest
+	GOBIN=$(GOBIN) $(GO) install github.com/air-verse/air@latest
 	air -c .air.toml
 
 .PHONY: install-tools
@@ -25,12 +26,14 @@ install-tools:
 	@echo "Installing air..."
 	GOBIN=$(GOBIN) $(GO) install github.com/air-verse/air@latest
 	@echo "Installing goose..."
-	GOBIN=$(GOBIN) $(GO) install github.com/pressly/goose/v3/cmd/goose@v3.19.1
+	GOBIN=$(GOBIN) $(GO) install github.com/pressly/goose/v3/cmd/goose@latest
 
 .PHONY: db-migrate
 db-migrate:
 	$(info $(M) Running DB migrations...)
-	/app/bin/goose -dir $(GOOSE_MIGRATION_DIR) postgres $(GOOSE_DBSTRING) up
+# /app/bin/goose -dir $(GOOSE_MIGRATION_DIR) postgres $(GOOSE_DBSTRING) up
+# goose -dir $(GOOSE_MIGRATION_DIR) postgres $(GOOSE_DBSTRING) up
+	goose postgres "postgres://postgres:postgres@db:5432/crypto?sslmode=disable" up -dir $(GOOSE_MIGRATION_DIR)
 
 
 .PHONY: test
