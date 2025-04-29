@@ -12,7 +12,7 @@ type UserSession struct {
 	UpdatedAt time.Time
 }
 
-// SessionManager управляет всеми сессиями пользователей 1234
+// SessionManager управляет всеми сессиями пользователей
 type SessionManager struct {
 	sessions map[int64]*UserSession
 	mu       sync.RWMutex

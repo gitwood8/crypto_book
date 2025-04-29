@@ -1,4 +1,8 @@
-version: "3.9"  # Обновляем версию!
+version: "3.9"
+
+networks:
+  wood_post_default:
+    external: false
 
 services:
   db:
@@ -18,6 +22,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - wood_post_default
 
   bot:
     build:
@@ -33,6 +39,8 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+    networks:
+      - wood_post_default
 
 volumes:
   pg_data:

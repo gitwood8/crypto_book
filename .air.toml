@@ -11,7 +11,7 @@ tmp_dir = ".tmp"
     full_bin = "bin/wood_post"
 
     include_ext = ["go"]
-    exclude_dir = [".tmp", "migrations"]
+    exclude_dir = [".tmp", "./migrations"]
     exclude_file = ["IMPORTANT_NOTES"]
     follow_symlink = true
     send_interrupt = true

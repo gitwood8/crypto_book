@@ -9,3 +9,5 @@ services:
     volumes:
       - .:/app
     command: ["make", "watch"]
+    environment:
+      - STORAGE_MIGRATION_DSN=postgres://postgres:postgres@db:5432/crypto
