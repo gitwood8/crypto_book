@@ -6,17 +6,17 @@ ENV PATH=$GOBIN:$PATH
 
 WORKDIR /app
 
-COPY . .
+COPY go.mod go.sum ./
 
 RUN apk add git && apk add --no-cache make && \
     go mod download && go mod tidy
+
+COPY . .
 
 RUN make install-tools
 RUN make build-service
 
 FROM builder AS dev
-
-# RUN apk add --no-cache git make curl
 
 ENTRYPOINT ["make", "watch"]
 

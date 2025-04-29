@@ -25,12 +25,14 @@ services:
     networks:
       - wood_post_default
 
-  bot:
+  tg_bot:
+  # image: wood_post:dev
     build:
       context: .
       # target: dev
+      args:
+        GOBIN: /app # new, why
       dockerfile: Dockerfile
-    # image: wood_post:dev
     container_name: wood_post
     env_file:
       - .env
