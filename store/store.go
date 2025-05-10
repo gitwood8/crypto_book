@@ -3,9 +3,10 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
+
+	"github.com/pkg/errors"
 
 	sq "github.com/Masterminds/squirrel"
 	"gitlab.com/avolkov/wood_post/pkg/log"
@@ -34,10 +35,17 @@ func (s *Store) CreateUserIfNotExists(ctx context.Context, telegramID int64, use
 }
 
 func (s *Store) CreatePortfolio(ctx context.Context, userID int64, name string, description string) error {
+	exists, err := s.PortfolioExists(ctx, userID)
+	if err != nil {
+		return errors.Wrap(err, "failed to check portfolio existence")
+	}
+
+	isDefault := !exists
+
 	query, args, err := s.sqlBuilder.
 		Insert("portfolios").
-		Columns("user_id", "name", "description", "created_at").
-		Values(userID, name, description, time.Now()).
+		Columns("user_id", "name", "description", "is_default", "created_at").
+		Values(userID, name, description, isDefault, time.Now()).
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("build insert portfolio: %w", err)
@@ -48,8 +56,7 @@ func (s *Store) CreatePortfolio(ctx context.Context, userID int64, name string, 
 		return fmt.Errorf("exec insert portfolio: %w", err)
 	}
 
-	log.Infof("portfolio for name: %s, userID:%d created successfully", name, userID)
-
+	log.Infof("portfolio for userID:%d with name: %s created (is_default: %v)", userID, name, isDefault)
 	return nil
 }
 
@@ -81,6 +88,30 @@ func (s *Store) UserExists(ctx context.Context, telegramID int64) (bool, error) 
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to execute UserExists query: %w", err)
+	}
+
+	return true, nil
+}
+
+func (s *Store) PortfolioExists(ctx context.Context, userID int64) (bool, error) {
+	// only check if row exists, no full scan, no data from table
+	query, args, err := s.sqlBuilder.
+		Select("1").
+		From("portfolios").
+		Where(sq.Eq{"user_id": userID}).
+		Limit(1).
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("failed to build PortfolioExists query: %w", err)
+	}
+
+	var exists int
+	err = s.DB.QueryRowContext(ctx, query, args...).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to execute PortfolioExists query: %w", err)
 	}
 
 	return true, nil
