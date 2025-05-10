@@ -23,12 +23,14 @@ CREATE TABLE IF NOT EXISTS transactions (
     portfolio_id BIGINT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
     type TEXT NOT NULL CHECK (type IN ('buy', 'sell', 'transfer')),
     pair TEXT NOT NULL,
-    amount_asset NUMERIC(18,8) NOT NULL,
+    asset_amount NUMERIC(18,8) NOT NULL,
+    asset_price NUMERIC(18,8),
     amount_usd NUMERIC(12,2) NOT NULL,
-    date TIMESTAMP NOT NULL,
+    transaction_date TIMESTAMP NOT NULL,
     note TEXT,
     created_at TIMESTAMP DEFAULT now()
 );
+
 
 -- +goose StatementEnd
 
