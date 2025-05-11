@@ -5,11 +5,13 @@ import (
 	"time"
 )
 
+// setState updates the user's session state and refreshes session timestamp.
+
 // save user's state
 type UserSession struct {
-	State     string
-	TempName  string
-	UpdatedAt time.Time
+	State             string
+	TempPortfolioName string
+	UpdatedAt         time.Time
 }
 
 // manage all user's sessions
@@ -26,31 +28,31 @@ func NewSessionManager() *SessionManager {
 }
 
 // return existing session or creates new
-func (sm *SessionManager) getOrCreateSession(userID int64) (*UserSession, bool) {
+func (sm *SessionManager) getOrCreateSession(tgUserID int64) (*UserSession, bool) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	session, exists := sm.sessions[userID]
+	session, exists := sm.sessions[tgUserID]
 	if !exists {
 		session = &UserSession{}
-		sm.sessions[userID] = session
+		sm.sessions[tgUserID] = session
 	}
 	session.UpdatedAt = time.Now()
 	return session, exists
 }
 
 // update user state
-func (sm *SessionManager) setState(userID int64, state string) {
-	session, _ := sm.getOrCreateSession(userID)
+func (sm *SessionManager) setState(tgUserID int64, state string) {
+	session, _ := sm.getOrCreateSession(tgUserID)
 	session.State = state
 }
 
 // return user state
-func (sm *SessionManager) getState(userID int64) (string, bool) {
+func (sm *SessionManager) getState(tgUserID int64) (string, bool) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
-	session, exists := sm.sessions[userID]
+	session, exists := sm.sessions[tgUserID]
 	if !exists {
 		return "", false
 	}
@@ -58,29 +60,29 @@ func (sm *SessionManager) getState(userID int64) (string, bool) {
 }
 
 // save temporary portfolio name
-func (sm *SessionManager) setTempName(userID int64, tempName string) {
-	session, _ := sm.getOrCreateSession(userID)
-	session.TempName = tempName
+func (sm *SessionManager) setTempName(tgUserID int64, tempName string) {
+	session, _ := sm.getOrCreateSession(tgUserID)
+	session.TempPortfolioName = tempName
 }
 
 // return temporary portfolio name
-func (sm *SessionManager) getTempName(userID int64) (string, bool) {
+func (sm *SessionManager) getTempName(tgUserID int64) (string, bool) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
-	session, exists := sm.sessions[userID]
+	session, exists := sm.sessions[tgUserID]
 	if !exists {
 		return "", false
 	}
-	return session.TempName, true
+	return session.TempPortfolioName, true
 }
 
 // delete user session
-func (sm *SessionManager) clearSession(userID int64) {
+func (sm *SessionManager) clearSession(tgUserID int64) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	delete(sm.sessions, userID)
+	delete(sm.sessions, tgUserID)
 }
 
 // delete sessions, that were not updated more then defined period
@@ -89,9 +91,9 @@ func (sm *SessionManager) cleanOldSessions(timeout time.Duration) {
 	defer sm.mu.Unlock()
 
 	now := time.Now()
-	for userID, session := range sm.sessions {
+	for tgUserID, session := range sm.sessions {
 		if now.Sub(session.UpdatedAt) > timeout {
-			delete(sm.sessions, userID)
+			delete(sm.sessions, tgUserID)
 		}
 	}
 }

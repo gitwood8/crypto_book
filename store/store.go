@@ -29,15 +29,15 @@ func (s *Store) CreateUserIfNotExists(ctx context.Context, telegramID int64, use
 		return fmt.Errorf("exec insert user: %w", err)
 	}
 
-	log.Infof("user name: %s, tgID: %d created successfully", username, telegramID)
+	log.Infof("user: %s, tgID: %d created successfully", username, telegramID)
 
 	return nil
 }
 
-func (s *Store) CreatePortfolio(ctx context.Context, userID int64, name string, description string) error {
+func (s *Store) CreatePortfolio(ctx context.Context, userID int64, portfolioName string, description string) error {
 	exists, err := s.PortfolioExists(ctx, userID)
 	if err != nil {
-		return errors.Wrap(err, "failed to check portfolio existence")
+		return fmt.Errorf("failed to check portfolio existence: %w", err)
 	}
 
 	isDefault := !exists
@@ -45,18 +45,18 @@ func (s *Store) CreatePortfolio(ctx context.Context, userID int64, name string, 
 	query, args, err := s.sqlBuilder.
 		Insert("portfolios").
 		Columns("user_id", "name", "description", "is_default", "created_at").
-		Values(userID, name, description, isDefault, time.Now()).
+		Values(userID, portfolioName, description, isDefault, time.Now()).
 		ToSql()
 	if err != nil {
-		return fmt.Errorf("build insert portfolio: %w", err)
+		return fmt.Errorf("build PortfolioExists query: %w", err)
 	}
 
 	_, err = s.DB.ExecContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("exec insert portfolio: %w", err)
+		return fmt.Errorf("exec PortfolioExists query: %w", err)
 	}
 
-	log.Infof("portfolio for userID:%d with name: %s created (is_default: %v)", userID, name, isDefault)
+	log.Infof("portfolio for userID:%d with name: %s created (is_default: %v)", userID, portfolioName, isDefault)
 	return nil
 }
 
@@ -74,11 +74,13 @@ func (s *Store) UserExists(ctx context.Context, telegramID int64) (bool, error) 
 	query, args, err := s.sqlBuilder.
 		Select("1").
 		From("users").
-		Where(sq.Eq{"telegram_id": telegramID}).
+		Where(sq.Eq{
+			"telegram_id": telegramID,
+		}).
 		Limit(1).
 		ToSql()
 	if err != nil {
-		return false, fmt.Errorf("failed to build UserExists query: %w", err)
+		return false, fmt.Errorf("build UserExists query: %w", err)
 	}
 
 	var exists int
@@ -87,7 +89,7 @@ func (s *Store) UserExists(ctx context.Context, telegramID int64) (bool, error) 
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
-		return false, fmt.Errorf("failed to execute UserExists query: %w", err)
+		return false, fmt.Errorf("exec UserExists query: %w", err)
 	}
 
 	return true, nil
@@ -98,11 +100,13 @@ func (s *Store) PortfolioExists(ctx context.Context, userID int64) (bool, error)
 	query, args, err := s.sqlBuilder.
 		Select("1").
 		From("portfolios").
-		Where(sq.Eq{"user_id": userID}).
+		Where(sq.Eq{
+			"user_id": userID,
+		}).
 		Limit(1).
 		ToSql()
 	if err != nil {
-		return false, fmt.Errorf("failed to build PortfolioExists query: %w", err)
+		return false, fmt.Errorf("build PortfolioExists query: %w", err)
 	}
 
 	var exists int
@@ -111,8 +115,52 @@ func (s *Store) PortfolioExists(ctx context.Context, userID int64) (bool, error)
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
-		return false, fmt.Errorf("failed to execute PortfolioExists query: %w", err)
+		return false, fmt.Errorf("exec PortfolioExists query: %w", err)
 	}
 
 	return true, nil
+}
+
+func (s *Store) ReachedPortfolioLimit(ctx context.Context, userID int64) (bool, error) {
+	var count int
+	query, args, err := s.sqlBuilder.
+		Select("COUNT(*)").
+		From("portfolios").
+		Where(sq.Eq{
+			"user_id": userID,
+		}).
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("build ReachedPortfolioLimit query: %w", err)
+	}
+	if err := s.DB.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+		return false, fmt.Errorf("exec ReachedPortfolioLimit query: %w", err)
+	}
+	return count >= 2, nil
+}
+
+func (s *Store) PortfolioNameExists(ctx context.Context, userID int64, portfolioName string) (bool, error) {
+	query, args, err := s.sqlBuilder.
+		Select("1").
+		From("portfolios").
+		Where(sq.Eq{
+			"user_id": userID,
+			"name":    portfolioName,
+		}).
+		Limit(1).
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("build unique name check query: %w", err)
+	}
+
+	var exists int
+	err = s.DB.QueryRowContext(ctx, query, args...).Scan(&exists)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	// any other error
+	return false, fmt.Errorf("exec unique portfolio name check query: %w", err)
 }

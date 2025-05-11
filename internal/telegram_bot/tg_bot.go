@@ -7,6 +7,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
+	"gitlab.com/avolkov/wood_post/pkg/log"
 )
 
 func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) error {
@@ -23,7 +24,7 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 
 	// catch any message
 	case update.Message != nil:
-		fmt.Println("eqweqweqw")
+		// fmt.Println("eqweqweqw")
 		return s.handleMessage(ctx, update.Message)
 	}
 
@@ -31,15 +32,15 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 }
 
 func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error {
-	userID := msg.From.ID
+	tgUserID := msg.From.ID
 
-	exists, err := s.store.UserExists(ctx, userID)
+	exists, err := s.store.UserExists(ctx, tgUserID)
 	if err != nil {
 		return errors.Wrap(err, "failed to check user existence")
 	}
 
 	if !exists {
-		if err := s.store.CreateUserIfNotExists(ctx, userID, msg.From.UserName); err != nil {
+		if err := s.store.CreateUserIfNotExists(ctx, tgUserID, msg.From.UserName); err != nil {
 			notify := tgbotapi.NewMessage(msg.Chat.ID, "Failed to create user. Please try again later.")
 			if sendErr := s.sendTemporaryMessage(notify, 10*time.Second); sendErr != nil {
 				return errors.Wrap(sendErr, "failed to notify user about user creation error")
@@ -74,56 +75,107 @@ func (s *Service) showWelcome(chatID int64) error {
 }
 
 func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery) error {
-	userID := cb.From.ID
+	tgUserID := cb.From.ID
 
 	switch cb.Data {
 	case "create_portfolio":
-		s.sessions.setState(userID, "waiting_portfolio_name")
-		msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Please enter the name of your portfolio:")
+		log.Infof("tg_user_id: %d, selected %s", tgUserID, cb.Data)
+
+		dbUserID, err := s.store.GetUserIDByTelegramID(ctx, tgUserID)
+		if err != nil {
+			return errors.Wrap(err, "failed to get user from DB")
+		}
+
+		limitReached, err := s.store.ReachedPortfolioLimit(ctx, dbUserID)
+		if err != nil {
+			log.Errorf("could not check portfolios amount: %s", err)
+			return s.sendTemporaryMessage(
+				tgbotapi.NewMessage(cb.Message.Chat.ID, "Oh, we could not create portfolio for you, please try again."), 10*time.Second,
+			)
+		}
+		log.Infof("portfolios limit reached: %t", limitReached)
+
+		if limitReached {
+			return s.sendTemporaryMessage(
+				tgbotapi.NewMessage(cb.Message.Chat.ID, "Sorry, you can create up to 2 portfolios. Gimmi ur munney to create more portfolios oi."), 10*time.Second,
+			)
+		}
+
+		s.sessions.setState(tgUserID, "waiting_portfolio_name")
 		// return s.sendTgMessage(msg)
-		return s.sendTemporaryMessage(msg, 60*time.Second)
+		return s.sendTemporaryMessage(tgbotapi.NewMessage(cb.Message.Chat.ID, "Please enter the name of your portfolio:"), 10*time.Second)
 	case "who_am_i":
-		s.sessions.setState(userID, "who_am_i")
+		// TODO: i dont need set state here, its finidhed flow
+		s.sessions.setState(tgUserID, "who_am_i")
 		msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Im very cool bot")
-		return s.sendTemporaryMessage(msg, 60*time.Second)
+		return s.sendTemporaryMessage(msg, 10*time.Second)
 	}
 
 	return nil
 }
 
 func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) error {
-	userID := msg.From.ID
-	state, ok := s.sessions.getState(userID)
+	tgUserID := msg.From.ID
+	state, ok := s.sessions.getState(tgUserID)
 
 	if !ok {
 		return nil
 	}
 
+	dbUserID, err := s.store.GetUserIDByTelegramID(ctx, msg.From.ID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get user from DB")
+	}
+
 	switch state {
 	case "waiting_portfolio_name":
-		s.sessions.setState(userID, "waiting_portfolio_description")
-		s.sessions.setTempName(userID, msg.Text)
+		nameTaken, err := s.store.PortfolioNameExists(ctx, dbUserID, msg.Text)
+		if err != nil {
+			log.Errorf("could not check PortfolioNameExists: %s", err)
+			return s.sendTemporaryMessage(
+				tgbotapi.NewMessage(msg.Chat.ID, "Oh, we could not create portfolio for you, please try again."), 10*time.Second,
+			)
+		}
 
-		return s.sendTgMessage(tgbotapi.NewMessage(msg.Chat.ID, "Please enter a description:"))
+		if nameTaken {
+			return s.sendTemporaryMessage(
+				tgbotapi.NewMessage(msg.Chat.ID, "Portfolio with such name already exists, try another name."), 10*time.Second,
+			)
+		}
+
+		s.sessions.setTempName(tgUserID, msg.Text)
+		s.sessions.setState(tgUserID, "waiting_portfolio_description")
+
+		t := fmt.Sprintf("Please enter description for portfolio %s", msg.Text)
+
+		return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID, t), 10*time.Second)
 
 	case "waiting_portfolio_description":
-		name, _ := s.sessions.getTempName(userID)
-		description := msg.Text
+		portfolioName, _ := s.sessions.getTempName(tgUserID)
+		portfolioDesc := msg.Text
 
-		dbUserID, err := s.store.GetUserIDByTelegramID(ctx, msg.From.ID)
+		err = s.store.CreatePortfolio(ctx, dbUserID, portfolioName, portfolioDesc)
 		if err != nil {
-			return errors.Wrap(err, "failed to get user from DB")
+			// switch {
+			// case errors.Is(err, store.ErrPortfolioNameExists):
+			// 	return s.sendTemporaryMessage(
+			// 		tgbotapi.NewMessage(msg.Chat.ID, "You already have a portfolio with this name. Try again."), 10*time.Second,
+			// 	)
+			// case errors.Is(err, store.ErrPortfolioLimitReached):
+			// 	return s.sendTemporaryMessage(
+			// 		tgbotapi.NewMessage(msg.Chat.ID, "Sorry, you can create up to 2 portfolios. Gimmi ur munney to create more portfolios oi."), 10*time.Second,
+			// 	)
+			// default:
+			// 	return fmt.Errorf("failed to create portfolio: %w", err)
+			// }
+			return fmt.Errorf("failed to create portfolio: %w", err)
 		}
 
-		if err := s.store.CreatePortfolio(ctx, dbUserID, name, description); err != nil {
-			return errors.Wrap(err, "failed to create portfolio")
-		}
+		s.sessions.clearSession(tgUserID)
 
-		s.sessions.clearSession(userID)
+		return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID, "Portfolio created successfully."), 15*time.Second)
 
-		return s.sendTgMessage(tgbotapi.NewMessage(msg.Chat.ID, "Portfolio created successfully."))
-
-	// TODO: investigate it
+	// TODO: investigate it (delete)
 	case "who_am_i":
 		return nil
 	}
