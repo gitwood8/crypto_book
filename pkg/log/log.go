@@ -6,10 +6,12 @@ import (
 )
 
 var (
-	infoLogger  = log.New(os.Stdout, "[INFO] ", log.LstdFlags|log.Lshortfile)
-	errorLogger = log.New(os.Stderr, "[ERROR] ", log.LstdFlags|log.Lshortfile)
-	debugLogger = log.New(os.Stdout, "[DEBUG] ", log.LstdFlags|log.Lshortfile)
-	warnLogger  = log.New(os.Stdout, "[WARN] ", log.LstdFlags|log.Lshortfile)
+	// infoLogger  = log.New(os.Stdout, "INFO: ", log.LstdFlags|log.Lshortfile)
+	infoLogger  = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	errorLogger = log.New(os.Stderr, "ERROR: ", log.LstdFlags|log.Lshortfile)
+	debugLogger = log.New(os.Stdout, "DEBUG: ", log.LstdFlags|log.Lshortfile)
+	warnLogger  = log.New(os.Stdout, "WARN: ", log.LstdFlags|log.Lshortfile)
+	// InfoLogger  = log.New(file, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
 func Info(v ...any) {

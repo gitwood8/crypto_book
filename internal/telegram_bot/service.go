@@ -36,13 +36,13 @@ func (s *Service) Run() error {
 	ctx := context.Background()
 
 	go func() {
-		ticker := time.NewTicker(1 * time.Minute)
+		ticker := time.NewTicker(5 * time.Minute)
 		// log.Info("clearing sessions")
 		defer ticker.Stop()
 
 		for range ticker.C {
 			// log.Info("cleaning")
-			s.sessions.cleanOldSessions(2 * time.Minute)
+			s.sessions.cleanOldSessions(5 * time.Minute)
 		}
 	}()
 

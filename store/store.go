@@ -60,12 +60,35 @@ func (s *Store) CreatePortfolio(ctx context.Context, userID int64, portfolioName
 	return nil
 }
 
+// without sqlBuilder example:
+// func (s *Store) GetUserIDByTelegramID(ctx context.Context, telegramID int64) (int64, error) {
+// 	var id int64
+// 	err := s.DB.QueryRowContext(ctx, "SELECT id FROM users WHERE telegram_id = $1", telegramID).Scan(&id)
+// 	if err != nil {
+// 		return 0, fmt.Errorf("get user id by telegram_id: %w", err)
+// 	}
+// 	return id, nil
+// }
+
 func (s *Store) GetUserIDByTelegramID(ctx context.Context, telegramID int64) (int64, error) {
-	var id int64
-	err := s.DB.QueryRowContext(ctx, "SELECT id FROM users WHERE telegram_id = $1", telegramID).Scan(&id)
+	query, args, err := s.sqlBuilder.
+		Select("id").
+		From("users").
+		Where(sq.Eq{
+			"telegram_id": telegramID,
+		}).
+		Limit(1).
+		ToSql()
 	if err != nil {
-		return 0, fmt.Errorf("get user id by telegram_id: %w", err)
+		return 0, fmt.Errorf("build GetUserIDByTelegramID query: %w", err)
 	}
+
+	var id int64
+	err = s.DB.QueryRowContext(ctx, query, args...).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("exec GetUserIDByTelegramID query: %w", err)
+	}
+
 	return id, nil
 }
 
@@ -164,3 +187,39 @@ func (s *Store) PortfolioNameExists(ctx context.Context, userID int64, portfolio
 	// any other error
 	return false, fmt.Errorf("exec unique portfolio name check query: %w", err)
 }
+
+func (s *Store) GetPortfolios(ctx context.Context, userID int64) ([]string, error) {
+	query, args, err := s.sqlBuilder.
+		Select("name").
+		From("portfolios").
+		Where(sq.Eq{
+			"user_id": userID,
+		}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build GetPortfolios query: %w", err)
+	}
+
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec GetPortfolios query: %w", err)
+	}
+	defer rows.Close()
+
+	var pNames []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan GetPortfolios result: %w", err)
+		}
+		pNames = append(pNames, name)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return pNames, nil
+}
+
+// func (db *sql.DB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
