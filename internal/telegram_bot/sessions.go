@@ -3,15 +3,18 @@ package telegram_bot
 import (
 	"sync"
 	"time"
+
+	"gitlab.com/avolkov/wood_post/pkg/log"
 )
 
 // setState updates the user's session state and refreshes session timestamp.
 
 // save user's state
 type UserSession struct {
-	State             string
-	TempPortfolioName string
-	UpdatedAt         time.Time
+	State                 string
+	TempPortfolioName     string
+	SelectedPortfolioName string
+	UpdatedAt             time.Time
 }
 
 // manage all user's sessions
@@ -60,21 +63,42 @@ func (sm *SessionManager) getState(tgUserID int64) (string, bool) {
 }
 
 // save temporary portfolio name
-func (sm *SessionManager) setTempName(tgUserID int64, tempName string) {
+// func (sm *SessionManager) setTempName(tgUserID int64, tempName string) {
+// 	session, _ := sm.getOrCreateSession(tgUserID)
+// 	session.TempPortfolioName = tempName
+// }
+
+func (sm *SessionManager) setTempField(tgUserID int64, field string, value string) {
 	session, _ := sm.getOrCreateSession(tgUserID)
-	session.TempPortfolioName = tempName
+
+	switch field {
+	case "TempPortfolioName":
+		session.TempPortfolioName = value
+	case "SelectedPortfolioName":
+		session.SelectedPortfolioName = value
+	default:
+		log.Errorf("nknown field name: %s", field)
+	}
 }
 
 // return temporary portfolio name
-func (sm *SessionManager) getTempName(tgUserID int64) (string, bool) {
+// func (sm *SessionManager) getTempName(tgUserID int64) (string, bool) {
+// 	sm.mu.RLock()
+// 	defer sm.mu.RUnlock()
+
+// 	session, exists := sm.sessions[tgUserID]
+// 	if !exists {
+// 		return "", false
+// 	}
+// 	return session.TempPortfolioName, true
+// }
+
+func (sm *SessionManager) getSessionVars(tgUserID int64) (*UserSession, bool) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
 	session, exists := sm.sessions[tgUserID]
-	if !exists {
-		return "", false
-	}
-	return session.TempPortfolioName, true
+	return session, exists
 }
 
 // delete user session

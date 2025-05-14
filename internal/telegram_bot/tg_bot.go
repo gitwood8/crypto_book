@@ -96,6 +96,16 @@ func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID
 		)
 	}
 
+	if len(ps) == 0 {
+		msg := tgbotapi.NewMessage(chatID, "You have no portfolios, let's create one!")
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("New portfolio", "create_portfolio"),
+			),
+		)
+		return s.sendTemporaryMessage(msg, 10*time.Second)
+	}
+
 	log.Infof("user_id: %d, portfolios: %s", dbUserID, ps)
 
 	var rows [][]tgbotapi.InlineKeyboardButton

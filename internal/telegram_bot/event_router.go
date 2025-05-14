@@ -45,8 +45,8 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 
 	log.Infof("user_id: %d, selected: %s", dbUserID, cb.Data)
 
-	switch cb.Data {
-	case "create_portfolio":
+	switch /* cb.Data */ {
+	case cb.Data == "create_portfolio":
 		return s.checkBeforeCreatePortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID)
 	// case "who_am_i":
 	// TODO: will be added later
@@ -55,10 +55,36 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	// msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Im very cool bot")
 	// return s.sendTemporaryMessage(msg, 10*time.Second)
 
-	case "show_portfolios":
-		// TODO: handle if cx has no portfolios
+	case cb.Data == "show_portfolios":
 		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID)
-		// case strings.HasPrefix(cb.Data, "portfolio_"):
+
+	case strings.HasPrefix(cb.Data, "portfolio_"):
+		s.sessions.setTempField(tgUserID, "SelectedPortfolioName", cb.Data)
+		fmt.Println(cb.Data)
+
+		msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Welcome! Let's create your first portfolio.")
+		msg.ParseMode = "Markdown"
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("Get report", "get_report_from_portfolio"),
+				tgbotapi.NewInlineKeyboardButtonData("Set as default", "set_as_default"),
+				tgbotapi.NewInlineKeyboardButtonData("Remane", "rename_portfolio"),
+				tgbotapi.NewInlineKeyboardButtonData("Delete", "delete_portfolio"),
+			),
+		)
+		// ОСТАНОВИЛСЯ ТУТ
+		// TODO: buttons are not visible in tg
+
+		return s.sendTemporaryMessage(msg, 10*time.Second)
+
+	case cb.Data == "get_report_from_portfolio":
+		return nil
+	case cb.Data == "set_as_default":
+		return nil
+	case cb.Data == "rename_portfolio":
+		return nil
+	case cb.Data == "delete_portfolio":
+		return nil
 	}
 
 	return nil
@@ -102,7 +128,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 			)
 		}
 
-		s.sessions.setTempName(tgUserID, pName)
+		s.sessions.setTempField(tgUserID, "TempPortfolioName", pName)
 		s.sessions.setState(tgUserID, "waiting_portfolio_description")
 
 		t := fmt.Sprintf("Please enter description for portfolio %s", pName)
@@ -110,11 +136,10 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID, t), 10*time.Second)
 
 	case "waiting_portfolio_description":
-		portfolioName, _ := s.sessions.getTempName(tgUserID)
-		// TODO: add regex check to exclude special characters
+		portfolio, _ := s.sessions.getSessionVars(tgUserID)
 		portfolioDesc := msg.Text
 
-		err = s.store.CreatePortfolio(ctx, dbUserID, portfolioName, portfolioDesc)
+		err = s.store.CreatePortfolio(ctx, dbUserID, portfolio.TempPortfolioName, portfolioDesc)
 		if err != nil {
 			return fmt.Errorf("failed to create portfolio: %w", err)
 		}
