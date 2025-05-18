@@ -14,6 +14,7 @@ type UserSession struct {
 	State                 string
 	TempPortfolioName     string
 	SelectedPortfolioName string
+	BotMessageID          int
 	UpdatedAt             time.Time
 }
 
@@ -62,20 +63,22 @@ func (sm *SessionManager) getState(tgUserID int64) (string, bool) {
 	return session.State, true
 }
 
-// save temporary portfolio name
-// func (sm *SessionManager) setTempName(tgUserID int64, tempName string) {
-// 	session, _ := sm.getOrCreateSession(tgUserID)
-// 	session.TempPortfolioName = tempName
-// }
-
-func (sm *SessionManager) setTempField(tgUserID int64, field string, value string) {
+func (sm *SessionManager) setTempField(tgUserID int64, field string, value interface{}) {
 	session, _ := sm.getOrCreateSession(tgUserID)
 
 	switch field {
 	case "TempPortfolioName":
-		session.TempPortfolioName = value
+		if v, ok := value.(string); ok {
+			session.TempPortfolioName = v
+		}
 	case "SelectedPortfolioName":
-		session.SelectedPortfolioName = value
+		if v, ok := value.(string); ok {
+			session.SelectedPortfolioName = v
+		}
+	case "BotMessageID":
+		if v, ok := value.(int); ok {
+			session.BotMessageID = v
+		}
 	default:
 		log.Errorf("nknown field name: %s", field)
 	}

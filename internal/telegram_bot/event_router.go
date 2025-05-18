@@ -88,8 +88,11 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 
 	switch state {
 	case "waiting_portfolio_name":
-		deleteMsg := tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID)
-		_, _ = s.bot.Request(deleteMsg)
+		p, _ := s.sessions.getSessionVars(tgUserID)
+		fmt.Println("bot message id: waiting_portfolio_name ", p.BotMessageID)
+
+		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, p.BotMessageID))
+		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
 
 		r := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
 		pName := r.ReplaceAllString(strings.ReplaceAll(msg.Text, " ", "_"), "")
@@ -118,18 +121,22 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		s.sessions.setTempField(tgUserID, "TempPortfolioName", pName)
 		s.sessions.setState(tgUserID, "waiting_portfolio_description")
 
-		t := fmt.Sprintf("Please enter description for portfolio: *%s*", pName)
+		t := fmt.Sprintf("Please enter description for portfolio: %s", pName)
 
-		return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID, t), 10*time.Second)
+		// return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID, t), 10*time.Second)
+		return s.sendTgMessage(tgbotapi.NewMessage(msg.Chat.ID,
+			t,
+		), tgUserID)
 
 	case "waiting_portfolio_description":
-		deleteMsg := tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID)
-		_, _ = s.bot.Request(deleteMsg)
+		p, _ := s.sessions.getSessionVars(tgUserID)
+		fmt.Println("bot message id: waiting_portfolio_description ", p.BotMessageID)
+		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, p.BotMessageID))
+		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
 
-		portfolio, _ := s.sessions.getSessionVars(tgUserID)
 		portfolioDesc := msg.Text
 
-		err = s.store.CreatePortfolio(ctx, dbUserID, portfolio.TempPortfolioName, portfolioDesc)
+		err = s.store.CreatePortfolio(ctx, dbUserID, p.TempPortfolioName, portfolioDesc)
 		if err != nil {
 			return fmt.Errorf("failed to create portfolio: %w", err)
 		}
@@ -137,7 +144,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		s.sessions.clearSession(tgUserID)
 
 		return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			"Portfolio created successfully."),
+			"Portfolio created successfully and set as default."),
 			10*time.Second)
 
 	// TODO: investigate it (delete)

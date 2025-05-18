@@ -25,6 +25,7 @@ func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error 
 				tgbotapi.NewMessage(msg.Chat.ID,
 					"Failed to create user. Please try again later."),
 				10*time.Second)
+
 			if sendErr != nil {
 				return fmt.Errorf("failed to notify user about user creation error: %w", err)
 			}
@@ -41,7 +42,9 @@ func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error 
 			tgbotapi.NewInlineKeyboardButtonData("New portfolio", "create_portfolio"),
 		),
 	)
-	return s.sendTemporaryMessage(resp, 10*time.Second)
+
+	// return s.sendTemporaryMessage(resp, 20*time.Second)
+	return s.sendTgMessage(resp, tgUserID)
 }
 
 func (s *Service) showWelcome(chatID int64) error {
@@ -54,7 +57,7 @@ func (s *Service) showWelcome(chatID int64) error {
 	)
 
 	// return s.sendTgMessage(msg)
-	return s.sendTemporaryMessage(msg, 10*time.Second)
+	return s.sendTemporaryMessage(msg, 20*time.Second)
 }
 
 func (s *Service) checkBeforeCreatePortfolio(ctx context.Context, chatID, tgUserID, dbUserID int64) error {
@@ -79,10 +82,16 @@ func (s *Service) checkBeforeCreatePortfolio(ctx context.Context, chatID, tgUser
 	}
 
 	s.sessions.setState(tgUserID, "waiting_portfolio_name")
-	// return s.sendTgMessage(msg)
-	return s.sendTemporaryMessage(tgbotapi.NewMessage(chatID,
-		"Please enter the name of your portfolio without special characters:"),
-		10*time.Second)
+
+	// return s.sendTemporaryMessage(tgbotapi.NewMessage(chatID,
+	// 	"Please enter the name of your portfolio without special characters:"),
+	// 	10*time.Second)
+
+	// s.sessions.setTempField(tgUserID, "SelectedPortfolioName", msgID)
+
+	return s.sendTgMessage(tgbotapi.NewMessage(chatID,
+		"Please enter the name of your portfolio without special characters:",
+	), tgUserID)
 }
 
 func (s *Service) ShowPortfolioActions(ctx context.Context, cb string, chatID, tgUserID int64) error {
@@ -116,6 +125,10 @@ func (s *Service) ShowPortfolioActions(ctx context.Context, cb string, chatID, t
 }
 
 func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID int64) error {
+	r, _ := s.sessions.getSessionVars(tgUserID)
+	deleteMsg := tgbotapi.NewDeleteMessage(chatID, r.BotMessageID)
+	_, _ = s.bot.Request(deleteMsg)
+
 	ps, err := s.store.GetPortfolios(ctx, dbUserID)
 	if err != nil {
 		log.Errorf("could not show portfolios: %s", err)
@@ -152,17 +165,22 @@ func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID
 	return s.sendTemporaryMessage(msg, 10*time.Second)
 }
 
-func (s *Service) sendTgMessage(c tgbotapi.Chattable) error {
-	if _, err := s.bot.Send(c); err != nil {
-		return errors.Wrap(err, "failed to send telegram message")
+func (s *Service) sendTgMessage(msg tgbotapi.Chattable, tgUserID int64) error {
+	sentMsg, err := s.bot.Send(msg)
+	if err != nil {
+		// return 0, errors.Wrap(err, "failed to send message")
+		return fmt.Errorf("failed to send message: %w", err)
 	}
+	fmt.Println("bot message id from func: ", sentMsg.MessageID)
+	s.sessions.setTempField(tgUserID, "BotMessageID", sentMsg.MessageID)
 	return nil
 }
 
 func (s *Service) sendTemporaryMessage(msg tgbotapi.Chattable, delay time.Duration) error {
 	sentMsg, err := s.bot.Send(msg)
 	if err != nil {
-		return errors.Wrap(err, "failed to send temporary message")
+		// return errors.Wrap(err, "failed to send temporary message")
+		return fmt.Errorf("failed to send temporary message: %w:", err)
 	}
 
 	go func() {
@@ -181,7 +199,7 @@ func (s *Service) editMessageText(chatID int64, messageID int, msg string) error
 
 	_, err := s.bot.Send(edit)
 	if err != nil {
-		log.Errorf("failed to edit message: %v", err)
+		return err
 	}
 	return nil
 
