@@ -43,7 +43,7 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return errors.Wrap(err, "failed to get user from DB")
 	}
 
-	log.Infof("user_id: %d, selected: %s", dbUserID, cb.Data)
+	log.Infof("user_id: %d, selected callback: %s", dbUserID, cb.Data)
 
 	switch /* cb.Data */ {
 	case cb.Data == "create_portfolio":
@@ -59,27 +59,11 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID)
 
 	case strings.HasPrefix(cb.Data, "portfolio_"):
-		s.sessions.setTempField(tgUserID, "SelectedPortfolioName", cb.Data)
-		fmt.Println(cb.Data)
-
-		msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Welcome! Let's create your first portfolio.")
-		msg.ParseMode = "Markdown"
-		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("Get report", "get_report_from_portfolio"),
-				tgbotapi.NewInlineKeyboardButtonData("Set as default", "set_as_default"),
-				tgbotapi.NewInlineKeyboardButtonData("Remane", "rename_portfolio"),
-				tgbotapi.NewInlineKeyboardButtonData("Delete", "delete_portfolio"),
-			),
-		)
-		// ОСТАНОВИЛСЯ ТУТ
-		// TODO: buttons are not visible in tg
-
-		return s.sendTemporaryMessage(msg, 10*time.Second)
+		return s.ShowPortfolioActions(ctx, cb.Data, cb.Message.Chat.ID, tgUserID)
 
 	case cb.Data == "get_report_from_portfolio":
 		return nil
-	case cb.Data == "set_as_default":
+	case cb.Data == "set_portfolio_as_default":
 		return nil
 	case cb.Data == "rename_portfolio":
 		return nil
@@ -104,6 +88,9 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 
 	switch state {
 	case "waiting_portfolio_name":
+		deleteMsg := tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID)
+		_, _ = s.bot.Request(deleteMsg)
+
 		r := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
 		pName := r.ReplaceAllString(strings.ReplaceAll(msg.Text, " ", "_"), "")
 
@@ -131,11 +118,14 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		s.sessions.setTempField(tgUserID, "TempPortfolioName", pName)
 		s.sessions.setState(tgUserID, "waiting_portfolio_description")
 
-		t := fmt.Sprintf("Please enter description for portfolio %s", pName)
+		t := fmt.Sprintf("Please enter description for portfolio: *%s*", pName)
 
 		return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID, t), 10*time.Second)
 
 	case "waiting_portfolio_description":
+		deleteMsg := tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID)
+		_, _ = s.bot.Request(deleteMsg)
+
 		portfolio, _ := s.sessions.getSessionVars(tgUserID)
 		portfolioDesc := msg.Text
 

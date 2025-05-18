@@ -68,7 +68,7 @@ func (s *Service) checkBeforeCreatePortfolio(ctx context.Context, chatID, tgUser
 			10*time.Second,
 		)
 	}
-	log.Infof("portfolios limit reached: %t", limitReached)
+	log.Infof("user_id: %d, portfolios limit reached: %t", dbUserID, limitReached)
 
 	if limitReached {
 		return s.sendTemporaryMessage(
@@ -83,6 +83,36 @@ func (s *Service) checkBeforeCreatePortfolio(ctx context.Context, chatID, tgUser
 	return s.sendTemporaryMessage(tgbotapi.NewMessage(chatID,
 		"Please enter the name of your portfolio without special characters:"),
 		10*time.Second)
+}
+
+func (s *Service) ShowPortfolioActions(ctx context.Context, cb string, chatID, tgUserID int64) error {
+	s.sessions.setTempField(tgUserID, "SelectedPortfolioName", cb)
+	fmt.Printf("chosen portfolio: %s", cb)
+
+	type Action struct {
+		TgText       string
+		CallBackName string
+	}
+
+	actions := []Action{
+		{"Get report", "get_report_from_portfolio"},
+		{"Set as default", "set_portfolio_as_default"},
+		{"Rename", "rename_portfolio"},
+		{"Delete", "delete_portfolio"},
+	}
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+	for _, a := range actions {
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(a.TgText, a.CallBackName),
+		))
+	}
+
+	msg := tgbotapi.NewMessage(chatID, "What would you like to do with portfolio?")
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	return s.sendTemporaryMessage(msg, 10*time.Second)
 }
 
 func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID int64) error {
@@ -106,7 +136,7 @@ func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID
 		return s.sendTemporaryMessage(msg, 10*time.Second)
 	}
 
-	log.Infof("user_id: %d, portfolios: %s", dbUserID, ps)
+	log.Infof("user_id: %d, portfolios list: %s", dbUserID, ps)
 
 	var rows [][]tgbotapi.InlineKeyboardButton
 	for _, p := range ps {
@@ -142,6 +172,19 @@ func (s *Service) sendTemporaryMessage(msg tgbotapi.Chattable, delay time.Durati
 	}()
 
 	return nil
+}
+
+func (s *Service) editMessageText(chatID int64, messageID int, msg string) error {
+	//"Portfolio name received. Now enter description:"
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, msg)
+	edit.ParseMode = "Markdown"
+
+	_, err := s.bot.Send(edit)
+	if err != nil {
+		log.Errorf("failed to edit message: %v", err)
+	}
+	return nil
+
 }
 
 func (s *Service) sendTestMessage(chatID int64, text string) error {
