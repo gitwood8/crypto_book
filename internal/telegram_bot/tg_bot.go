@@ -43,7 +43,6 @@ func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error 
 		),
 	)
 
-	// return s.sendTemporaryMessage(resp, 20*time.Second)
 	return s.sendTgMessage(resp, tgUserID)
 }
 
@@ -56,11 +55,15 @@ func (s *Service) showWelcome(chatID int64) error {
 		),
 	)
 
-	// return s.sendTgMessage(msg)
 	return s.sendTemporaryMessage(msg, 20*time.Second)
 }
 
 func (s *Service) checkBeforeCreatePortfolio(ctx context.Context, chatID, tgUserID, dbUserID int64) error {
+	r, ok := s.sessions.getSessionVars(tgUserID)
+	if !ok {
+		return nil
+	}
+
 	limitReached, err := s.store.ReachedPortfolioLimit(ctx, dbUserID)
 	if err != nil {
 		log.Errorf("could not check portfolios amount: %s", err)
@@ -74,24 +77,18 @@ func (s *Service) checkBeforeCreatePortfolio(ctx context.Context, chatID, tgUser
 	log.Infof("user_id: %d, portfolios limit reached: %t", dbUserID, limitReached)
 
 	if limitReached {
-		return s.sendTemporaryMessage(
-			tgbotapi.NewMessage(chatID,
-				"Sorry, you can create up to 2 portfolios. Gimmi ur munney to create more portfolios oi."),
-			10*time.Second,
-		)
+		return s.editMessageText(
+			chatID,
+			r.BotMessageID,
+			"Sorry, you can create up to 2 portfolios. Gimmi ur munney to create more portfolios oi.")
 	}
 
 	s.sessions.setState(tgUserID, "waiting_portfolio_name")
 
-	// return s.sendTemporaryMessage(tgbotapi.NewMessage(chatID,
-	// 	"Please enter the name of your portfolio without special characters:"),
-	// 	10*time.Second)
-
-	// s.sessions.setTempField(tgUserID, "SelectedPortfolioName", msgID)
-
-	return s.sendTgMessage(tgbotapi.NewMessage(chatID,
-		"Please enter the name of your portfolio without special characters:",
-	), tgUserID)
+	return s.editMessageText(
+		chatID,
+		r.BotMessageID,
+		"Please enter the name of your portfolio without special characters:")
 }
 
 func (s *Service) ShowPortfolioActions(ctx context.Context, cb string, chatID, tgUserID int64) error {
@@ -168,10 +165,9 @@ func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID
 func (s *Service) sendTgMessage(msg tgbotapi.Chattable, tgUserID int64) error {
 	sentMsg, err := s.bot.Send(msg)
 	if err != nil {
-		// return 0, errors.Wrap(err, "failed to send message")
 		return fmt.Errorf("failed to send message: %w", err)
 	}
-	fmt.Println("bot message id from func: ", sentMsg.MessageID)
+	// fmt.Println("bot message id from func 1: ", sentMsg.MessageID)
 	s.sessions.setTempField(tgUserID, "BotMessageID", sentMsg.MessageID)
 	return nil
 }
@@ -179,7 +175,6 @@ func (s *Service) sendTgMessage(msg tgbotapi.Chattable, tgUserID int64) error {
 func (s *Service) sendTemporaryMessage(msg tgbotapi.Chattable, delay time.Duration) error {
 	sentMsg, err := s.bot.Send(msg)
 	if err != nil {
-		// return errors.Wrap(err, "failed to send temporary message")
 		return fmt.Errorf("failed to send temporary message: %w:", err)
 	}
 
@@ -192,24 +187,35 @@ func (s *Service) sendTemporaryMessage(msg tgbotapi.Chattable, delay time.Durati
 	return nil
 }
 
-func (s *Service) editMessageText(chatID int64, messageID int, msg string) error {
-	//"Portfolio name received. Now enter description:"
-	edit := tgbotapi.NewEditMessageText(chatID, messageID, msg)
-	edit.ParseMode = "Markdown"
-
+func (s *Service) editMessageText(chatID int64, messageID int, text string) error {
+	// fmt.Println("editMessageText started")
+	// fmt.Println(chatID, messageID, text)
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	// edit.ParseMode = "Markdown"
 	_, err := s.bot.Send(edit)
 	if err != nil {
 		return err
 	}
 	return nil
-
 }
 
-func (s *Service) sendTestMessage(chatID int64, text string) error {
-	msg := tgbotapi.NewMessage(chatID, text)
-	_, err := s.bot.Send(msg)
+// func (s *Service) sendTestMessage(chatID int64, text string) error {
+// 	msg := tgbotapi.NewMessage(chatID, text)
+// 	_, err := s.bot.Send(msg)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to send text message: %w", err)
+// 	}
+// 	return nil
+// }
+
+func (s *Service) sendTestMessage(chatID int64, messageID int, text string) error {
+	fmt.Println("editMessageText started: ", chatID, messageID, text)
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	edit.ParseMode = "Markdown"
+	_, err := s.bot.Send(edit)
+
 	if err != nil {
-		return fmt.Errorf("failed to send text message: %w", err)
+		return err
 	}
 	return nil
 }

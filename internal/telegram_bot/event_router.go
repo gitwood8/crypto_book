@@ -18,8 +18,17 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 	case update.Message != nil && update.Message.Text == "/start":
 		return s.handleStart(ctx, update.Message)
 
-	case update.Message != nil && update.Message.Text == "/qwe":
-		return s.sendTestMessage(update.Message.From.ID, "test passed")
+	case update.Message != nil && update.Message.Text == "qwe":
+		// fmt.Println(update.Message.Text)
+		resp := tgbotapi.NewMessage(update.Message.Chat.ID, "jopa")
+		err := s.sendTgMessage(resp, update.Message.From.ID)
+		if err != nil {
+			return err
+		}
+		p, _ := s.sessions.getSessionVars(update.Message.From.ID)
+
+		time.Sleep(3 * time.Second)
+		return s.sendTestMessage(update.Message.Chat.ID, p.BotMessageID, "test passed")
 
 	// catch any callback
 	case update.CallbackQuery != nil:
@@ -51,7 +60,7 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	// case "who_am_i":
 	// TODO: will be added later
 
-	// s.sessions.setState(tgUserID, "who_am_i")
+	// s.sessions.setState(tgUserID, "who_am_i") // why?
 	// msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Im very cool bot")
 	// return s.sendTemporaryMessage(msg, 10*time.Second)
 
@@ -89,9 +98,6 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 	switch state {
 	case "waiting_portfolio_name":
 		p, _ := s.sessions.getSessionVars(tgUserID)
-		fmt.Println("bot message id: waiting_portfolio_name ", p.BotMessageID)
-
-		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, p.BotMessageID))
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
 
 		r := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
@@ -111,9 +117,10 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		}
 
 		if nameTaken {
+			t := fmt.Sprintf("Portfolio with name '%s' already exists, try another name.", pName)
 			return s.sendTemporaryMessage(
 				tgbotapi.NewMessage(msg.Chat.ID,
-					"Portfolio with such name already exists, try another name."),
+					t),
 				10*time.Second,
 			)
 		}
@@ -122,15 +129,10 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		s.sessions.setState(tgUserID, "waiting_portfolio_description")
 
 		t := fmt.Sprintf("Please enter description for portfolio: %s", pName)
-
-		// return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID, t), 10*time.Second)
-		return s.sendTgMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			t,
-		), tgUserID)
+		return s.editMessageText(msg.Chat.ID, p.BotMessageID, t)
 
 	case "waiting_portfolio_description":
 		p, _ := s.sessions.getSessionVars(tgUserID)
-		fmt.Println("bot message id: waiting_portfolio_description ", p.BotMessageID)
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, p.BotMessageID))
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
 
@@ -144,7 +146,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		s.sessions.clearSession(tgUserID)
 
 		return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			"Portfolio created successfully and set as default."),
+			"Portfolio created successfully!"),
 			10*time.Second)
 
 	// TODO: investigate it (delete)
