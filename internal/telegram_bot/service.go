@@ -30,19 +30,21 @@ func New(token string, db *store.Store) (*Service, error) {
 	}, nil
 }
 
-func (s *Service) Run() error {
+func (s *Service) Run(ctx context.Context) error {
 	log.Infof("authorized on account %s", s.bot.Self.UserName)
-
-	ctx := context.Background()
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
-		// log.Info("clearing sessions")
 		defer ticker.Stop()
 
-		for range ticker.C {
-			// log.Info("cleaning")
-			s.sessions.cleanOldSessions(5 * time.Minute)
+		for {
+			select {
+			case <-ticker.C:
+				s.sessions.cleanOldSessions(5 * time.Minute)
+			case <-ctx.Done():
+				log.Info("session cleaner stopping")
+				return
+			}
 		}
 	}()
 
@@ -51,11 +53,21 @@ func (s *Service) Run() error {
 	updates := s.bot.GetUpdatesChan(u)
 
 	// listening = long polling
-	for update := range updates {
-		if err := s.handleUpdate(ctx, update); err != nil {
-			log.Error("update handling error:", err)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Info("bot polling stopped by context")
+			return nil
+
+		case update, ok := <-updates:
+			if !ok {
+				log.Warn("updates channel closed")
+				return nil
+			}
+
+			if err := s.handleUpdate(ctx, update); err != nil {
+				log.Error("update handling error:", err)
+			}
 		}
 	}
-
-	return nil
 }

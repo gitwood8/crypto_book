@@ -112,6 +112,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 			return s.sendTemporaryMessage(
 				tgbotapi.NewMessage(msg.Chat.ID,
 					"Oh, we could not create portfolio for you, please try again."),
+				tgUserID,
 				10*time.Second,
 			)
 		}
@@ -121,6 +122,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 			return s.sendTemporaryMessage(
 				tgbotapi.NewMessage(msg.Chat.ID,
 					t),
+				tgUserID,
 				10*time.Second,
 			)
 		}
@@ -147,6 +149,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 
 		return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID,
 			"Portfolio created successfully!"),
+			tgUserID,
 			10*time.Second)
 
 	// TODO: investigate it (delete)

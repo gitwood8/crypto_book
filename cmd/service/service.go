@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,8 +25,11 @@ func main() {
 	}
 	// log.Info("internal.New completed")
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	go func() {
-		if err := services.TelegramBot.Run(); err != nil {
+		if err := services.TelegramBot.Run(ctx); err != nil {
 			log.Error("bot error:", err)
 		}
 	}()
@@ -37,4 +41,5 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
 	log.Info("Shutting down...")
+	cancel()
 }

@@ -24,6 +24,7 @@ func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error 
 			sendErr := s.sendTemporaryMessage(
 				tgbotapi.NewMessage(msg.Chat.ID,
 					"Failed to create user. Please try again later."),
+				tgUserID,
 				10*time.Second)
 
 			if sendErr != nil {
@@ -32,9 +33,10 @@ func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error 
 			return fmt.Errorf("failed to create user in DB: %w", err)
 		}
 
-		return s.showWelcome(msg.Chat.ID)
+		return s.showWelcome(msg.Chat.ID, tgUserID)
 	}
 
+	// here should be buttons with general flow buttons (transaction, portfolio and reports)
 	resp := tgbotapi.NewMessage(msg.Chat.ID, "You already have an account. What would you like to do next?")
 	resp.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -43,10 +45,11 @@ func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error 
 		),
 	)
 
-	return s.sendTgMessage(resp, tgUserID)
+	// return s.sendTgMessage(resp, tgUserID)
+	return s.sendTemporaryMessage(resp, tgUserID, 10*time.Second)
 }
 
-func (s *Service) showWelcome(chatID int64) error {
+func (s *Service) showWelcome(chatID, tgUserID int64) error {
 	msg := tgbotapi.NewMessage(chatID, "Welcome! Let's create your first portfolio.")
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -54,8 +57,8 @@ func (s *Service) showWelcome(chatID int64) error {
 			tgbotapi.NewInlineKeyboardButtonData("Who am I?", "who_am_i"),
 		),
 	)
-
-	return s.sendTemporaryMessage(msg, 20*time.Second)
+	// return s.sendTgMessage(msg, tgUserID)
+	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 }
 
 func (s *Service) checkBeforeCreatePortfolio(ctx context.Context, chatID, tgUserID, dbUserID int64) error {
@@ -71,6 +74,7 @@ func (s *Service) checkBeforeCreatePortfolio(ctx context.Context, chatID, tgUser
 			tgbotapi.NewMessage(
 				chatID,
 				"Oh, we could not create portfolio for you, please try again."),
+			tgUserID,
 			10*time.Second,
 		)
 	}
@@ -105,6 +109,7 @@ func (s *Service) ShowPortfolioActions(ctx context.Context, cb string, chatID, t
 		{"Set as default", "set_portfolio_as_default"},
 		{"Rename", "rename_portfolio"},
 		{"Delete", "delete_portfolio"},
+		{"Create new", "create_portfolio"},
 	}
 
 	var rows [][]tgbotapi.InlineKeyboardButton
@@ -118,7 +123,7 @@ func (s *Service) ShowPortfolioActions(ctx context.Context, cb string, chatID, t
 	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
 
-	return s.sendTemporaryMessage(msg, 10*time.Second)
+	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
 }
 
 func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID int64) error {
@@ -132,6 +137,7 @@ func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID
 		return s.sendTemporaryMessage(
 			tgbotapi.NewMessage(chatID,
 				"Sorry, we can get your portfolios, please try again later."),
+			tgUserID,
 			10*time.Second,
 		)
 	}
@@ -143,7 +149,7 @@ func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID
 				tgbotapi.NewInlineKeyboardButtonData("New portfolio", "create_portfolio"),
 			),
 		)
-		return s.sendTemporaryMessage(msg, 10*time.Second)
+		return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
 	}
 
 	log.Infof("user_id: %d, portfolios list: %s", dbUserID, ps)
@@ -159,7 +165,7 @@ func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID
 	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
 
-	return s.sendTemporaryMessage(msg, 10*time.Second)
+	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
 }
 
 func (s *Service) sendTgMessage(msg tgbotapi.Chattable, tgUserID int64) error {
@@ -172,11 +178,13 @@ func (s *Service) sendTgMessage(msg tgbotapi.Chattable, tgUserID int64) error {
 	return nil
 }
 
-func (s *Service) sendTemporaryMessage(msg tgbotapi.Chattable, delay time.Duration) error {
+func (s *Service) sendTemporaryMessage(msg tgbotapi.Chattable, tgUserID int64, delay time.Duration) error {
 	sentMsg, err := s.bot.Send(msg)
 	if err != nil {
 		return fmt.Errorf("failed to send temporary message: %w:", err)
 	}
+
+	s.sessions.setTempField(tgUserID, "BotMessageID", sentMsg.MessageID)
 
 	go func() {
 		time.Sleep(delay)
