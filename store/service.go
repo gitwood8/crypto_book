@@ -14,7 +14,7 @@ import (
 type Store struct {
 	DB         *sql.DB
 	sqlBuilder sq.StatementBuilderType // SQL query builder from squirrel
-	TempName   map[int64]string        // temp storage for portfolio name per user
+	// TempName   map[int64]string        // temp storage for portfolio name per user | wtf?
 	// moved to session manager
 	// mu         sync.RWMutex            // cuncurency protection while multiple users interaction
 }
@@ -56,6 +56,6 @@ func New(user, password, host, port, dbname string) (*Store, error) {
 	return &Store{
 		DB:         db,
 		sqlBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
-		TempName:   make(map[int64]string),
+		// TempName:   make(map[int64]string),
 	}, nil
 }

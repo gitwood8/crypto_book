@@ -3,6 +3,7 @@ package telegram_bot
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -17,6 +18,8 @@ func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error 
 	if err != nil {
 		return errors.Wrap(err, "failed to check user existence")
 	}
+
+	// s := s.store.
 
 	if !exists {
 		err := s.store.CreateUserIfNotExists(ctx, tgUserID, msg.From.UserName)
@@ -40,8 +43,10 @@ func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error 
 	resp := tgbotapi.NewMessage(msg.Chat.ID, "You already have an account. What would you like to do next?")
 	resp.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("My portfolios", "show_portfolios"),
-			tgbotapi.NewInlineKeyboardButtonData("New portfolio", "create_portfolio"),
+			tgbotapi.NewInlineKeyboardButtonData("Show portfolios", "show_portfolios"), // testing
+			tgbotapi.NewInlineKeyboardButtonData("Transactions", "gf_transactions"),
+			tgbotapi.NewInlineKeyboardButtonData("My portfolios", "gf_portfolios"),
+			tgbotapi.NewInlineKeyboardButtonData("Reports", "gf_reports"),
 		),
 	)
 
@@ -95,40 +100,8 @@ func (s *Service) checkBeforeCreatePortfolio(ctx context.Context, chatID, tgUser
 		"Please enter the name of your portfolio without special characters:")
 }
 
-func (s *Service) ShowPortfolioActions(ctx context.Context, cb string, chatID, tgUserID int64) error {
-	s.sessions.setTempField(tgUserID, "SelectedPortfolioName", cb)
-	fmt.Printf("chosen portfolio: %s", cb)
-
-	type Action struct {
-		TgText       string
-		CallBackName string
-	}
-
-	actions := []Action{
-		{"Get report", "get_report_from_portfolio"},
-		{"Set as default", "set_portfolio_as_default"},
-		{"Rename", "rename_portfolio"},
-		{"Delete", "delete_portfolio"},
-		{"Create new", "create_portfolio"},
-	}
-
-	var rows [][]tgbotapi.InlineKeyboardButton
-	for _, a := range actions {
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(a.TgText, a.CallBackName),
-		))
-	}
-
-	msg := tgbotapi.NewMessage(chatID, "What would you like to do with portfolio?")
-	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
-
-	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
-}
-
-func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID int64) error {
-	r, _ := s.sessions.getSessionVars(tgUserID)
-	deleteMsg := tgbotapi.NewDeleteMessage(chatID, r.BotMessageID)
+func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID int64, BotMsgID int) error {
+	deleteMsg := tgbotapi.NewDeleteMessage(chatID, BotMsgID)
 	_, _ = s.bot.Request(deleteMsg)
 
 	ps, err := s.store.GetPortfolios(ctx, dbUserID)
@@ -136,7 +109,7 @@ func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID
 		log.Errorf("could not show portfolios: %s", err)
 		return s.sendTemporaryMessage(
 			tgbotapi.NewMessage(chatID,
-				"Sorry, we can get your portfolios, please try again later."),
+				"Sorry, we cannot get your portfolios, please try again later."),
 			tgUserID,
 			10*time.Second,
 		)
@@ -166,6 +139,43 @@ func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
 
 	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
+}
+
+func (s *Service) ShowPortfolioActions(cb string, chatID, tgUserID int64, BotMsgID int) error {
+	deleteMsg := tgbotapi.NewDeleteMessage(chatID, BotMsgID)
+	_, _ = s.bot.Request(deleteMsg)
+
+	cb = strings.TrimPrefix(cb, "portfolio_")
+
+	s.sessions.setTempField(tgUserID, "SelectedPortfolioName", cb)
+	fmt.Println("chosen portfolio: ", cb)
+
+	type Action struct {
+		TgText       string
+		CallBackName string
+	}
+
+	actions := []Action{
+		{"Get report", "get_report_from_portfolio"},
+		{"Set as default", "set_portfolio_as_default"},
+		{"Rename", "rename_portfolio"},
+		{"Delete", "delete_portfolio"},
+		{"Create new", "create_portfolio"},
+	}
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+	for _, a := range actions {
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(a.TgText, a.CallBackName),
+		))
+	}
+
+	msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("What would you like to do with portfolio '*%scb*'?", cb))
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
+	// return s.editMessageText(chatID, messageID, text)
 }
 
 func (s *Service) sendTgMessage(msg tgbotapi.Chattable, tgUserID int64) error {
@@ -226,4 +236,78 @@ func (s *Service) sendTestMessage(chatID int64, messageID int, text string) erro
 		return err
 	}
 	return nil
+}
+
+func (s *Service) deletePortfolioByName(chatID, tgUserID int64, BotMsgID int) error {
+	deleteMsg := tgbotapi.NewDeleteMessage(chatID, BotMsgID)
+	_, _ = s.bot.Request(deleteMsg)
+
+	msg := tgbotapi.NewMessage(chatID, "Are you sure? This will permanently delete the portfolio and its transactions.")
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Yes, delete", "confirm_portfolio_deletinon"),
+			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_portfolio_deletinon"),
+		),
+	)
+	s.sessions.setState(tgUserID, "waiting_delete_portfolio_decision")
+
+	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
+}
+
+func (s *Service) portfolioDeletinonConfirmed(ctx context.Context, chatID, tgUserID, dbUserID int64, BotMsgID int, pName string) error {
+	err := s.editMessageText(chatID, BotMsgID, "Deleting portfolio...")
+	if err != nil {
+		return err
+	}
+
+	err = s.store.GfDeletePortfolio(ctx, dbUserID, pName)
+	if err != nil {
+		err := s.editMessageText(chatID, BotMsgID, "Could not delete portfolio, please try again.")
+		if err != nil {
+			return nil // ignore error cause we need to return bd error
+		}
+		return err
+	}
+
+	log.Infof("portfolio deleted: user_id=%d, p_name=%s", dbUserID, pName)
+
+	return s.editMessageText(chatID, BotMsgID, "Portfolio deleted successfully.")
+}
+
+func (s *Service) gfPortfoliosMain(cb string, chatID, tgUserID int64, BotMsgID int) error {
+	deleteMsg := tgbotapi.NewDeleteMessage(chatID, BotMsgID)
+	_, _ = s.bot.Request(deleteMsg)
+
+	// cb = strings.TrimPrefix(cb, "portfolio_")
+
+	// s.sessions.setTempField(tgUserID, "SelectedPortfolioName", cb)
+	// fmt.Println("chosen portfolio: ", cb)
+
+	// TODO: move to types
+	type Action struct {
+		TgText       string
+		CallBackName string
+	}
+
+	actions := []Action{
+		{"New portfolio", "create_portfolio"}, // already exists
+		{"Delete portfolio", "set_portfolio_as_default"},
+		{"Check default", "rename_portfolio"},
+		{"Change default", "delete_portfolio"},
+		{"Rename", "create_portfolio"},
+	}
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+	for _, a := range actions {
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(a.TgText, a.CallBackName),
+		))
+	}
+
+	msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("What would you like to do with portfolio '*%scb*'?", cb))
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
+	// return s.editMessageText(chatID, messageID, text)
 }

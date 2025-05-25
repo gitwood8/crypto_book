@@ -223,3 +223,51 @@ func (s *Store) GetPortfolios(ctx context.Context, userID int64) ([]string, erro
 }
 
 // func (db *sql.DB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+
+func (s *Store) GfDeletePortfolio(ctx context.Context, dbUserID int64, portfolioName string) error {
+	// r, _ := s.sessions.getSessionVars(tgUserID)
+	// fmt.Println("portfilio to delete: ", r.SelectedPortfolioName)
+
+	query, args, err := s.sqlBuilder.
+		Delete("portfolios").
+		Where(sq.Eq{
+			"user_id": dbUserID,
+			"name":    portfolioName,
+		}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build delete query: %w", err)
+	}
+
+	result, err := s.DB.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("exec delete query: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		log.Warnf("no portfolio deleted for user_id=%d, p_name=%s", dbUserID, portfolioName)
+	}
+
+	return nil
+}
+
+// func (s *Store) GetDefaultPortfolio(ctx context.Context, userID int64) ([]string, error) {
+// 	query, args, err := s.sqlBuilder.
+// 		Select("id").
+// 		From("portfolios").
+// 		Where(sq.Eq{
+// 			"user_id": userID,
+// 		}).
+// 		ToSql()
+// 	if err != nil {
+// 		return nil, fmt.Errorf("build GetPortfolios query: %w", err)
+// 	}
+
+// 	rows, err := s.DB.QueryContext(ctx, query, args...)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("exec GetPortfolios query: %w", err)
+// 	}
+// 	defer rows.Close()
+
+// }

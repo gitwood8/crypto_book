@@ -52,6 +52,7 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return errors.Wrap(err, "failed to get user from DB")
 	}
 
+	r, _ := s.sessions.getSessionVars(tgUserID)
 	log.Infof("user_id: %d, selected callback: %s", dbUserID, cb.Data)
 
 	switch /* cb.Data */ {
@@ -65,10 +66,11 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	// return s.sendTemporaryMessage(msg, 10*time.Second)
 
 	case cb.Data == "show_portfolios":
-		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID)
+		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID)
 
 	case strings.HasPrefix(cb.Data, "portfolio_"):
-		return s.ShowPortfolioActions(ctx, cb.Data, cb.Message.Chat.ID, tgUserID)
+		log.Infof("callback received: %+v", cb)
+		return s.ShowPortfolioActions(cb.Data, cb.Message.Chat.ID, tgUserID, r.BotMessageID)
 
 	case cb.Data == "get_report_from_portfolio":
 		return nil
@@ -76,8 +78,19 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return nil
 	case cb.Data == "rename_portfolio":
 		return nil
+
 	case cb.Data == "delete_portfolio":
-		return nil
+		return s.deletePortfolioByName(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
+
+	case cb.Data == "confirm_portfolio_deletinon":
+		return s.portfolioDeletinonConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, r.SelectedPortfolioName)
+
+	case cb.Data == "cancel_portfolio_deletinon":
+		r, _ := s.sessions.getSessionVars(tgUserID)
+		return s.editMessageText(cb.Message.Chat.ID, r.BotMessageID, "")
+
+	case cb.Data == "gf_portfolios":
+
 	}
 
 	return nil
