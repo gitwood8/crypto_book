@@ -252,22 +252,57 @@ func (s *Store) GfDeletePortfolio(ctx context.Context, dbUserID int64, portfolio
 	return nil
 }
 
-// func (s *Store) GetDefaultPortfolio(ctx context.Context, userID int64) ([]string, error) {
-// 	query, args, err := s.sqlBuilder.
-// 		Select("id").
-// 		From("portfolios").
-// 		Where(sq.Eq{
-// 			"user_id": userID,
-// 		}).
-// 		ToSql()
-// 	if err != nil {
-// 		return nil, fmt.Errorf("build GetPortfolios query: %w", err)
-// 	}
+func (s *Store) GetDefaultPortfolio(ctx context.Context, dbUserID int64) (string, error) {
+	query, args, err := s.sqlBuilder.
+		Select("name").
+		From("portfolios").
+		Where(sq.Eq{
+			"user_id":    dbUserID,
+			"is_default": true,
+		}).
+		ToSql()
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
+		return "", fmt.Errorf("build GetDefaultPortfolio query: %w", err)
+	}
 
-// 	rows, err := s.DB.QueryContext(ctx, query, args...)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("exec GetPortfolios query: %w", err)
-// 	}
-// 	defer rows.Close()
+	var dpName string
+	err = s.DB.QueryRowContext(ctx, query, args...).Scan(&dpName)
+	if err != nil {
+		return "", fmt.Errorf("exec GetDefaultPortfolio query: %w", err)
+	}
+	return dpName, nil
+}
 
-// }
+func (s *Store) RenamePortfolio(ctx context.Context, dbUserID int64, oldName, newName string) error {
+	query, args, err := s.sqlBuilder.
+		Update("portfolios").
+		Set("name", newName).
+		Where(sq.Eq{
+			"user_id": dbUserID,
+			"name":    oldName,
+		}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build RenamePortfolio query: %w", err)
+	}
+
+	result, err := s.DB.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("exec RenamePortfolio query: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check affected rows: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("rename failed: no portfolio found with name '%s'", oldName)
+	}
+
+	log.Infof("portfolio renamed: user_id=%d, from='%s' to='%s'", dbUserID, oldName, newName)
+	return nil
+}

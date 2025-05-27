@@ -79,6 +79,10 @@ func (sm *SessionManager) setTempField(tgUserID int64, field string, value inter
 		if v, ok := value.(int); ok {
 			session.BotMessageID = v
 		}
+	case "NextAction":
+		if v, ok := value.(int); ok {
+			session.BotMessageID = v
+		}
 	default:
 		log.Errorf("nknown field name: %s", field)
 	}

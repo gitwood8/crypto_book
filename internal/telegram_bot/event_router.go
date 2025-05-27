@@ -65,33 +65,48 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	// msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Im very cool bot")
 	// return s.sendTemporaryMessage(msg, 10*time.Second)
 
-	case cb.Data == "show_portfolios":
-		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID)
+	// case cb.Data == "show_portfolios":
+	// 	return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID)
 
-	case strings.HasPrefix(cb.Data, "portfolio_"):
-		log.Infof("callback received: %+v", cb)
-		return s.ShowPortfolioActions(cb.Data, cb.Message.Chat.ID, tgUserID, r.BotMessageID)
+	// case strings.HasPrefix(cb.Data, "portfolio_"):
+	// 	// log.Infof("callback received: %+v", cb)
+	// 	return s.ShowPortfolioActions(cb.Data, cb.Message.Chat.ID, tgUserID, r.BotMessageID)
 
-	case cb.Data == "get_report_from_portfolio":
-		return nil
-	case cb.Data == "set_portfolio_as_default":
-		return nil
-	case cb.Data == "rename_portfolio":
-		return nil
+	// case cb.Data == "get_report_from_portfolio":
+	// 	return nil
+	// case cb.Data == "set_portfolio_as_default":
+	// 	return nil
+	// case cb.Data == "rename_portfolio":
+	// 	return nil
 
-	case cb.Data == "delete_portfolio":
-		return s.deletePortfolioByName(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
+	// case cb.Data == "delete_portfolio": TESTING
+
+	case cb.Data == "gf_portfolios":
+		return s.gfPortfoliosMain(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
+
+	case cb.Data == "gf_portfolios_delete":
+		s.sessions.setTempField(tgUserID, "NextAction", "delete")
+		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, "delete")
+
+		// TODO тут должна быть функция, которая разбирает кейс Action (delete/rename/set default ...)
+	case strings.Contains(cb.Data, "::"):
+		log.Infof("callback data: %s", cb.Data)
+
+		// return s.askDeletePortfolioConfirmation(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
+		return s.performActionForPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, cb.Data)
 
 	case cb.Data == "confirm_portfolio_deletinon":
 		return s.portfolioDeletinonConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, r.SelectedPortfolioName)
 
-	case cb.Data == "cancel_portfolio_deletinon":
-		r, _ := s.sessions.getSessionVars(tgUserID)
-		return s.editMessageText(cb.Message.Chat.ID, r.BotMessageID, "")
+	case cb.Data == "cancel_action":
+		s.sessions.clearSession(tgUserID)
+		// return s.editMessageText(cb.Message.Chat.ID, r.BotMessageID, "")
 
-	case cb.Data == "gf_portfolios":
-
+		deleteMsg := tgbotapi.NewDeleteMessage(cb.Message.Chat.ID, r.BotMessageID)
+		_, _ = s.bot.Request(deleteMsg)
+		return nil
 	}
+	// fmt.Println("portfolio, callback: ", action, p)
 
 	return nil
 }
