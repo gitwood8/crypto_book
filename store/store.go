@@ -173,7 +173,7 @@ func (s *Store) PortfolioNameExists(ctx context.Context, userID int64, portfolio
 		Limit(1).
 		ToSql()
 	if err != nil {
-		return false, fmt.Errorf("build unique name check query: %w", err)
+		return false, fmt.Errorf("build PortfolioNameExists query: %w", err)
 	}
 
 	var exists int
@@ -185,7 +185,7 @@ func (s *Store) PortfolioNameExists(ctx context.Context, userID int64, portfolio
 		return false, nil
 	}
 	// any other error
-	return false, fmt.Errorf("exec unique portfolio name check query: %w", err)
+	return false, fmt.Errorf("exec PortfolioNameExists query: %w", err)
 }
 
 func (s *Store) GetPortfolios(ctx context.Context, userID int64) ([]string, error) {
@@ -303,6 +303,6 @@ func (s *Store) RenamePortfolio(ctx context.Context, dbUserID int64, oldName, ne
 		return fmt.Errorf("rename failed: no portfolio found with name '%s'", oldName)
 	}
 
-	log.Infof("portfolio renamed: user_id=%d, from='%s' to='%s'", dbUserID, oldName, newName)
+	log.Infof("portfolio renamed: user_id=%d, from=%s to=%s", dbUserID, oldName, newName)
 	return nil
 }

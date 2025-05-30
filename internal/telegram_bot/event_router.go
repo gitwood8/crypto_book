@@ -88,15 +88,19 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		s.sessions.setTempField(tgUserID, "NextAction", "delete")
 		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, "delete")
 
-		// TODO тут должна быть функция, которая разбирает кейс Action (delete/rename/set default ...)
+	case cb.Data == "gf_portfolio_rename":
+		s.sessions.setTempField(tgUserID, "NextAction", "rename")
+		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, "rename")
+
 	case strings.Contains(cb.Data, "::"):
 		log.Infof("callback data: %s", cb.Data)
-
-		// return s.askDeletePortfolioConfirmation(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
 		return s.performActionForPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, cb.Data)
 
 	case cb.Data == "confirm_portfolio_deletinon":
-		return s.portfolioDeletinonConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, r.SelectedPortfolioName)
+		return s.portfolioDeletinonConfirmed(ctx, cb.Message.Chat.ID, dbUserID, r.BotMessageID, r.SelectedPortfolioName)
+
+	case cb.Data == "confirm_portfolio_rename":
+		return s.portfolioRenameConfirmed(ctx, cb.Message.Chat.ID, dbUserID, r.BotMessageID, r.SelectedPortfolioName, r.TempPortfolioName)
 
 	case cb.Data == "cancel_action":
 		s.sessions.clearSession(tgUserID)
@@ -179,6 +183,13 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 			"Portfolio created successfully!"),
 			tgUserID,
 			10*time.Second)
+
+	case "waiting_for_new_portfolio_name":
+		p, _ := s.sessions.getSessionVars(tgUserID)
+		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, p.BotMessageID))
+		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
+		s.sessions.setTempField(tgUserID, "TempPortfolioName", msg.Text)
+		return s.askRenamePortfolioConfirmation(msg.Chat.ID, tgUserID, p.BotMessageID, p.SelectedPortfolioName, msg.Text)
 
 	// TODO: investigate it (delete)
 	case "who_am_i":

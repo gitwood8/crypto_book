@@ -19,8 +19,6 @@ func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error 
 		return errors.Wrap(err, "failed to check user existence")
 	}
 
-	// s := s.store.
-
 	if !exists {
 		err := s.store.CreateUserIfNotExists(ctx, tgUserID, msg.From.UserName)
 		if err != nil {
@@ -141,44 +139,6 @@ func (s *Service) ShowPortfolios(ctx context.Context, chatID, tgUserID, dbUserID
 	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
 }
 
-// func (s *Service) ShowPortfolioActions(cb string, chatID, tgUserID int64, BotMsgID int) error {
-// 	deleteMsg := tgbotapi.NewDeleteMessage(chatID, BotMsgID)
-// 	_, _ = s.bot.Request(deleteMsg)
-
-// 	cb = strings.TrimPrefix(cb, "portfolio_")
-
-// 	s.sessions.setTempField(tgUserID, "SelectedPortfolioName", cb)
-// 	fmt.Println("chosen portfolio: ", cb)
-
-// 	type Action struct {
-// 		TgText       string
-// 		CallBackName string
-// 	}
-
-// 	// FIXME: this is just a test
-// 	actions := []Action{
-// 		{"Get report", "get_report_from_portfolio"},
-// 		{"Set as default", "set_portfolio_as_default"},
-// 		{"Rename", "rename_portfolio"},
-// 		{"Delete", "delete_portfolio"},
-// 		{"Create new", "create_portfolio"},
-// 	}
-
-// 	var rows [][]tgbotapi.InlineKeyboardButton
-// 	for _, a := range actions {
-// 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-// 			tgbotapi.NewInlineKeyboardButtonData(a.TgText, a.CallBackName),
-// 		))
-// 	}
-
-// 	msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("What would you like to do with portfolio '*%scb*'?", cb))
-// 	msg.ParseMode = "Markdown"
-// 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
-
-// 	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
-// 	// return s.editMessageText(chatID, messageID, text)
-// }
-
 func (s *Service) sendTgMessage(msg tgbotapi.Chattable, tgUserID int64) error {
 	sentMsg, err := s.bot.Send(msg)
 	if err != nil {
@@ -239,11 +199,43 @@ func (s *Service) sendTestMessage(chatID int64, messageID int, text string) erro
 	return nil
 }
 
-func (s *Service) askDeletePortfolioConfirmation(chatID, tgUserID int64, BotMsgID int) error {
+func (s *Service) askRenamePortfolioConfirmation(chatID, tgUserID int64, BotMsgID int, oldName, newName string) error {
 	deleteMsg := tgbotapi.NewDeleteMessage(chatID, BotMsgID)
 	_, _ = s.bot.Request(deleteMsg)
 
-	msg := tgbotapi.NewMessage(chatID, "Are you sure? This will permanently delete the portfolio and its transactions.")
+	msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("Are you sure you want to rename portfolion *'%s'* to *'%s'*?", oldName, newName))
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Yes, rename", "confirm_portfolio_rename"),
+			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+		),
+	)
+	s.sessions.setState(tgUserID, "waiting_rename_portfolio_decision")
+
+	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
+}
+
+func (s *Service) portfolioRenameConfirmed(ctx context.Context, chatID, dbUserID int64, BotMsgID int, oldName, newName string) error {
+	err := s.store.RenamePortfolio(ctx, dbUserID, oldName, newName)
+	if err != nil {
+		err := s.editMessageText(chatID, BotMsgID, "Could not rename portfolio, please try again.")
+		if err != nil {
+			return nil // ignore error cause we need to return bd error
+		}
+		return err
+	}
+	log.Infof("portfolio renamed: user_id=%d, old_portfolio_name=%s, new_portfolio_name=%s", dbUserID, oldName, newName)
+
+	return s.editMessageText(chatID, BotMsgID, "Portfolio renamed successfully.")
+}
+
+func (s *Service) askDeletePortfolioConfirmation(chatID, tgUserID int64, BotMsgID int, portfolioName string) error {
+	deleteMsg := tgbotapi.NewDeleteMessage(chatID, BotMsgID)
+	_, _ = s.bot.Request(deleteMsg)
+
+	msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("Are you sure? This will permanently delete the portfolio *'%s'* and its transactions.", portfolioName))
+	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("Yes, delete", "confirm_portfolio_deletinon"),
@@ -255,13 +247,13 @@ func (s *Service) askDeletePortfolioConfirmation(chatID, tgUserID int64, BotMsgI
 	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
 }
 
-func (s *Service) portfolioDeletinonConfirmed(ctx context.Context, chatID, tgUserID, dbUserID int64, BotMsgID int, pName string) error {
+func (s *Service) portfolioDeletinonConfirmed(ctx context.Context, chatID, dbUserID int64, BotMsgID int, pName string) error {
 	err := s.editMessageText(chatID, BotMsgID, "Deleting portfolio...")
-	time.Sleep(3 * time.Second)
-
 	if err != nil {
 		return err
 	}
+
+	time.Sleep(2 * time.Second)
 
 	err = s.store.GfDeletePortfolio(ctx, dbUserID, pName)
 	if err != nil {
@@ -272,7 +264,7 @@ func (s *Service) portfolioDeletinonConfirmed(ctx context.Context, chatID, tgUse
 		return err
 	}
 
-	log.Infof("portfolio deleted: user_id=%d, p_name=%s", dbUserID, pName)
+	log.Infof("portfolio deleted: user_id=%d, portfolio_name=%s", dbUserID, pName)
 
 	return s.editMessageText(chatID, BotMsgID, "Portfolio deleted successfully.")
 }
@@ -280,11 +272,6 @@ func (s *Service) portfolioDeletinonConfirmed(ctx context.Context, chatID, tgUse
 func (s *Service) gfPortfoliosMain(chatID, tgUserID int64, BotMsgID int) error {
 	deleteMsg := tgbotapi.NewDeleteMessage(chatID, BotMsgID)
 	_, _ = s.bot.Request(deleteMsg)
-
-	// cb = strings.TrimPrefix(cb, "portfolio_")
-
-	// s.sessions.setTempField(tgUserID, "SelectedPortfolioName", cb)
-	// fmt.Println("chosen portfolio: ", cb)
 
 	// TODO: move to types
 	type Action struct {
@@ -312,7 +299,6 @@ func (s *Service) gfPortfoliosMain(chatID, tgUserID int64, BotMsgID int) error {
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
 
 	return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
-	// return s.editMessageText(chatID, messageID, text)
 }
 
 func (s *Service) performActionForPortfolio(ctx context.Context, chatID, tgUserID, dbUserID int64, BotMsgID int, cb string) error {
@@ -325,13 +311,16 @@ func (s *Service) performActionForPortfolio(ctx context.Context, chatID, tgUserI
 	action := parts[0]
 	portfolio := parts[1]
 
+	s.sessions.setTempField(tgUserID, "SelectedPortfolioName", portfolio)
+
 	switch action {
 	case "delete":
 		if portfolio == name {
 			deleteMsg := tgbotapi.NewDeleteMessage(chatID, BotMsgID)
 			_, _ = s.bot.Request(deleteMsg)
 
-			msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("You cannot delete *default* portfolio *%s*. Change default one first.", portfolio))
+			msg := tgbotapi.NewMessage(chatID,
+				fmt.Sprintf("You cannot delete *default* portfolio *%s*. Change default one first.", portfolio))
 			msg.ParseMode = "Markdown"
 			msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 				tgbotapi.NewInlineKeyboardRow(
@@ -343,11 +332,13 @@ func (s *Service) performActionForPortfolio(ctx context.Context, chatID, tgUserI
 			return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
 		}
 
-		return s.askDeletePortfolioConfirmation(chatID, tgUserID, BotMsgID)
+		return s.askDeletePortfolioConfirmation(chatID, tgUserID, BotMsgID, portfolio)
 
 	case "rename":
+		deleteMsg := tgbotapi.NewDeleteMessage(chatID, BotMsgID)
+		_, _ = s.bot.Request(deleteMsg)
 		s.sessions.setState(tgUserID, "waiting_for_new_portfolio_name")
-		msg := tgbotapi.NewMessage(chatID, "Please enter a new name for your portfolio without special characters")
+		msg := tgbotapi.NewMessage(chatID, "Please enter a new name for your portfolio without special characters.")
 
 		return s.sendTemporaryMessage(msg, tgUserID, 10*time.Second)
 
