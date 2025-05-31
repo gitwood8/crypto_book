@@ -3,6 +3,7 @@ package telegram_bot
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -38,18 +39,37 @@ func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error 
 	}
 
 	//FIXME: here should be buttons with general flow buttons (transaction, portfolio and reports)
-	resp := tgbotapi.NewMessage(msg.Chat.ID, "You already have an account. What would you like to do next?")
-	resp.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Show portfolios", "show_portfolios"), // testing
-			// tgbotapi.NewInlineKeyboardButtonData("Transactions", "gf_transactions"),
-			tgbotapi.NewInlineKeyboardButtonData("My portfolios", "gf_portfolios"),
-			// tgbotapi.NewInlineKeyboardButtonData("Reports", "gf_reports"),
+	//---------------------------------- OLD version
+	// resp := tgbotapi.NewMessage(msg.Chat.ID, "You already have an account. What would you like to do next?")
+	// resp.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+	// 	tgbotapi.NewInlineKeyboardRow(
+	// 		tgbotapi.NewInlineKeyboardButtonData("Show portfolios", "show_portfolios"), // testing
+	// 		// tgbotapi.NewInlineKeyboardButtonData("Transactions", "gf_transactions"),
+	// 		tgbotapi.NewInlineKeyboardButtonData("My portfolios", "gf_portfolios"),
+	// 		// tgbotapi.NewInlineKeyboardButtonData("Reports", "gf_reports"),
+	// 	),
+	// )
+	// return s.sendTemporaryMessage(resp, tgUserID, 10*time.Second)
+	//---------------------------------- OLD version
+
+	return s.showMainMenu(msg.Chat.ID, tgUserID)
+}
+
+func (s *Service) showMainMenu(chatID, tgUserID int64) error {
+	s.sessions.setState(tgUserID, "main_menu")
+
+	mainMenu := tgbotapi.NewMessage(chatID, "What would you like to do?")
+	mainMenu.ReplyMarkup = tgbotapi.NewReplyKeyboard(
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("My portfolios"),
+			tgbotapi.NewKeyboardButton("Transactions"),
+		),
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("Help"), // not valid yet
 		),
 	)
 
-	// return s.sendTgMessage(resp, tgUserID)
-	return s.sendTemporaryMessage(resp, tgUserID, 10*time.Second)
+	return s.sendTemporaryMessage(mainMenu, chatID, 10*time.Second)
 }
 
 func (s *Service) showWelcome(chatID, tgUserID int64) error {
@@ -349,4 +369,14 @@ func (s *Service) performActionForPortfolio(ctx context.Context, chatID, tgUserI
 			tgbotapi.NewMessage(chatID, "Ops, something went wrong. please try again."),
 			tgUserID, 10*time.Second)
 	}
+}
+
+func (s *Service) prettyPortfolioName(portfolioName string) string {
+	r := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
+	pName := r.ReplaceAllString(strings.ReplaceAll(portfolioName, " ", "_"), "")
+
+	ru := regexp.MustCompile(`_+`)
+	pName = ru.ReplaceAllString(strings.ToLower(pName), "_")
+
+	return pName
 }

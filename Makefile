@@ -17,16 +17,19 @@ build-service:
 	$(GO) build -o $(GOBIN)/$(PROJECT_NAME) ./cmd/service/*.go
 
 watch:
-# @go install github.com/air-verse/air@latest
-	GOBIN=$(GOBIN) $(GO) install github.com/air-verse/air@latest
+# GOBIN=$(GOBIN) $(GO) install github.com/air-verse/air@latest
+	GOBIN=$(GOBIN) $(GO) install github.com/cosmtrek/air@v1.51.0
 	air -c .air.toml
 
 .PHONY: install-tools
 install-tools:
 	@echo "Installing air..."
-	GOBIN=$(GOBIN) $(GO) install github.com/air-verse/air@latest
+# GOBIN=$(GOBIN) $(GO) install github.com/air-verse/air@latest
+	GOBIN=$(GOBIN) $(GO) install github.com/cosmtrek/air@v1.51.0
 	@echo "Installing goose..."
-	GOBIN=$(GOBIN) $(GO) install github.com/pressly/goose/v3/cmd/goose@latest
+	GOBIN=$(GOBIN) $(GO) install github.com/pressly/goose/v3/cmd/goose@v3.19.1
+	@echo "Installing linter..."
+	GOBIN=$(GOBIN) $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
 
 .PHONY: db-migrate
 db-migrate:
@@ -35,6 +38,8 @@ db-migrate:
 # goose -dir $(GOOSE_MIGRATION_DIR) postgres $(GOOSE_DBSTRING) up
 	goose postgres "postgres://postgres:postgres@db:5432/crypto?sslmode=disable" up -dir $(GOOSE_MIGRATION_DIR)
 
+lint: install-linter ; $(info $(M) running linters...)
+	@$(GOBIN)/golangci-lint run --timeout 5m0s ./...
 
 .PHONY: test
 test:

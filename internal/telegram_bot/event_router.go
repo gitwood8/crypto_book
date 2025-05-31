@@ -3,7 +3,6 @@ package telegram_bot
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -17,6 +16,19 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 	switch {
 	case update.Message != nil && update.Message.Text == "/start":
 		return s.handleStart(ctx, update.Message)
+
+	// case update.Message != nil && update.Message.Text == "jopa":
+	// 	mainMenu := tgbotapi.NewMessage(update.Message.Chat.ID, "Welcome back! What would you like to do?")
+	// 	mainMenu.ReplyMarkup = tgbotapi.NewReplyKeyboard(
+	// 		tgbotapi.NewKeyboardButtonRow(
+	// 			tgbotapi.NewKeyboardButton("Portfolios"),
+	// 			tgbotapi.NewKeyboardButton("New Portfolio"),
+	// 		),
+	// 		tgbotapi.NewKeyboardButtonRow(
+	// 			tgbotapi.NewKeyboardButton("Help"),
+	// 		),
+	// 	)
+	// 	return s.sendTemporaryMessage(mainMenu, update.Message.From.ID, 10*time.Second)
 
 	case update.Message != nil && update.Message.Text == "qwe":
 		// fmt.Println(update.Message.Text)
@@ -64,25 +76,10 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	// s.sessions.setState(tgUserID, "who_am_i") // why?
 	// msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Im very cool bot")
 	// return s.sendTemporaryMessage(msg, 10*time.Second)
+	// ---------------------------------------------
 
-	// case cb.Data == "show_portfolios":
-	// 	return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID)
-
-	// case strings.HasPrefix(cb.Data, "portfolio_"):
-	// 	// log.Infof("callback received: %+v", cb)
-	// 	return s.ShowPortfolioActions(cb.Data, cb.Message.Chat.ID, tgUserID, r.BotMessageID)
-
-	// case cb.Data == "get_report_from_portfolio":
-	// 	return nil
-	// case cb.Data == "set_portfolio_as_default":
-	// 	return nil
-	// case cb.Data == "rename_portfolio":
-	// 	return nil
-
-	// case cb.Data == "delete_portfolio": TESTING
-
-	case cb.Data == "gf_portfolios":
-		return s.gfPortfoliosMain(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
+	// case cb.Data == "gf_portfolios":
+	// 	return s.gfPortfoliosMain(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
 
 	case cb.Data == "gf_portfolios_delete":
 		s.sessions.setTempField(tgUserID, "NextAction", "delete")
@@ -122,6 +119,9 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		return nil
 	}
 
+	p, _ := s.sessions.getSessionVars(tgUserID)
+
+	//TODO: i can add tgID to temp field to avoid db requests every time
 	dbUserID, err := s.store.GetUserIDByTelegramID(ctx, msg.From.ID)
 	if err != nil {
 		return errors.Wrap(err, "failed to get user from DB")
@@ -129,14 +129,15 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 
 	switch state {
 	case "waiting_portfolio_name":
-		p, _ := s.sessions.getSessionVars(tgUserID)
+		// p, _ := s.sessions.getSessionVars(tgUserID)
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
+		pName := s.prettyPortfolioName(msg.Text)
 
-		r := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
-		pName := r.ReplaceAllString(strings.ReplaceAll(msg.Text, " ", "_"), "")
+		// r := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
+		// pName := r.ReplaceAllString(strings.ReplaceAll(msg.Text, " ", "_"), "")
 
-		ru := regexp.MustCompile(`_+`)
-		pName = ru.ReplaceAllString(pName, "_")
+		// ru := regexp.MustCompile(`_+`)
+		// pName = ru.ReplaceAllString(pName, "_")
 
 		nameTaken, err := s.store.PortfolioNameExists(ctx, dbUserID, pName)
 		if err != nil {
@@ -166,7 +167,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		return s.editMessageText(msg.Chat.ID, p.BotMessageID, t)
 
 	case "waiting_portfolio_description":
-		p, _ := s.sessions.getSessionVars(tgUserID)
+		// p, _ := s.sessions.getSessionVars(tgUserID)
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, p.BotMessageID))
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
 
@@ -179,21 +180,40 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 
 		s.sessions.clearSession(tgUserID)
 
-		return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			"Portfolio created successfully!"),
-			tgUserID,
-			10*time.Second)
+		// return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID,
+		// 	"Portfolio created successfully!"),
+		// 	tgUserID,
+		// 	10*time.Second)
+
+		err := s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID,
+			"Portfolio created successfully!"), tgUserID, 10*time.Second)
+		if err != nil {
+			return nil
+		}
+		return s.showMainMenu(msg.Chat.ID, tgUserID)
 
 	case "waiting_for_new_portfolio_name":
-		p, _ := s.sessions.getSessionVars(tgUserID)
+		// p, _ := s.sessions.getSessionVars(tgUserID)
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, p.BotMessageID))
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
-		s.sessions.setTempField(tgUserID, "TempPortfolioName", msg.Text)
-		return s.askRenamePortfolioConfirmation(msg.Chat.ID, tgUserID, p.BotMessageID, p.SelectedPortfolioName, msg.Text)
 
-	// TODO: investigate it (delete)
-	case "who_am_i":
-		return nil
+		pName := s.prettyPortfolioName(msg.Text)
+		s.sessions.setTempField(tgUserID, "TempPortfolioName", pName)
+		return s.askRenamePortfolioConfirmation(msg.Chat.ID, tgUserID, p.BotMessageID, p.SelectedPortfolioName, pName)
+
+	case "main_menu":
+		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
+		text := msg.Text
+
+		switch text {
+		case "My portfolios":
+			log.Infof("main menu: %s", text)
+			return s.gfPortfoliosMain(msg.Chat.ID, tgUserID, p.BotMessageID)
+
+		case "Transactions":
+			log.Infof("main menu: %s", text)
+			return nil
+		}
 	}
 
 	return nil

@@ -84,7 +84,7 @@ func (sm *SessionManager) setTempField(tgUserID int64, field string, value inter
 			session.BotMessageID = v
 		}
 	default:
-		log.Errorf("nknown field name: %s", field)
+		log.Errorf("unknown field name: %s", field)
 	}
 }
 
