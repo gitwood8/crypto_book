@@ -28,7 +28,7 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 	// 			tgbotapi.NewKeyboardButton("Help"),
 	// 		),
 	// 	)
-	// 	return s.sendTemporaryMessage(mainMenu, update.Message.From.ID, 10*time.Second)
+	// 	return s.sendTemporaryMessage(mainMenu, update.Message.From.ID, 15*time.Second)
 
 	case update.Message != nil && update.Message.Text == "qwe":
 		// fmt.Println(update.Message.Text)
@@ -67,7 +67,7 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	r, _ := s.sessions.getSessionVars(tgUserID)
 	log.Infof("user_id: %d, selected callback: %s", dbUserID, cb.Data)
 
-	switch /* cb.Data */ {
+	switch {
 	case cb.Data == "create_portfolio":
 		return s.checkBeforeCreatePortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID)
 	// case "who_am_i":
@@ -75,7 +75,7 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 
 	// s.sessions.setState(tgUserID, "who_am_i") // why?
 	// msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Im very cool bot")
-	// return s.sendTemporaryMessage(msg, 10*time.Second)
+	// return s.sendTemporaryMessage(msg, 15*time.Second)
 	// ---------------------------------------------
 
 	// case cb.Data == "gf_portfolios":
@@ -89,23 +89,31 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		s.sessions.setTempField(tgUserID, "NextAction", "rename")
 		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, "rename")
 
+	case cb.Data == "gf_portfolio_change_default":
+		s.sessions.setTempField(tgUserID, "NextAction", "change_default")
+		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, "change_default")
+
+	case cb.Data == "gf_portfolio_get_default":
+		return s.showDefaultPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID)
+
 	case strings.Contains(cb.Data, "::"):
 		log.Infof("callback data: %s", cb.Data)
 		return s.performActionForPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, cb.Data)
 
-	case cb.Data == "confirm_portfolio_deletinon":
-		return s.portfolioDeletinonConfirmed(ctx, cb.Message.Chat.ID, dbUserID, r.BotMessageID, r.SelectedPortfolioName)
+	case cb.Data == "confirm_portfolio_deletion":
+		return s.portfolioDeletinonConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, r.SelectedPortfolioName)
 
 	case cb.Data == "confirm_portfolio_rename":
-		return s.portfolioRenameConfirmed(ctx, cb.Message.Chat.ID, dbUserID, r.BotMessageID, r.SelectedPortfolioName, r.TempPortfolioName)
+		return s.portfolioRenameConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, r.SelectedPortfolioName, r.TempPortfolioName)
+
+	case cb.Data == "confirm_portfolio_change_default":
+		return s.portfolioChangeDefaultConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, r.SelectedPortfolioName)
 
 	case cb.Data == "cancel_action":
 		s.sessions.clearSession(tgUserID)
 		// return s.editMessageText(cb.Message.Chat.ID, r.BotMessageID, "")
-
-		deleteMsg := tgbotapi.NewDeleteMessage(cb.Message.Chat.ID, r.BotMessageID)
-		_, _ = s.bot.Request(deleteMsg)
-		return nil
+		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(cb.Message.Chat.ID, r.BotMessageID))
+		return s.showMainMenu(cb.Message.Chat.ID, tgUserID)
 	}
 	// fmt.Println("portfolio, callback: ", action, p)
 
@@ -114,6 +122,7 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 
 func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) error {
 	tgUserID := msg.From.ID
+	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
 	state, ok := s.sessions.getState(tgUserID)
 	if !ok {
 		return nil
@@ -129,15 +138,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 
 	switch state {
 	case "waiting_portfolio_name":
-		// p, _ := s.sessions.getSessionVars(tgUserID)
-		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
 		pName := s.prettyPortfolioName(msg.Text)
-
-		// r := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
-		// pName := r.ReplaceAllString(strings.ReplaceAll(msg.Text, " ", "_"), "")
-
-		// ru := regexp.MustCompile(`_+`)
-		// pName = ru.ReplaceAllString(pName, "_")
 
 		nameTaken, err := s.store.PortfolioNameExists(ctx, dbUserID, pName)
 		if err != nil {
@@ -145,19 +146,13 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 			return s.sendTemporaryMessage(
 				tgbotapi.NewMessage(msg.Chat.ID,
 					"Oh, we could not create portfolio for you, please try again."),
-				tgUserID,
-				10*time.Second,
-			)
+				tgUserID, 15*time.Second)
 		}
 
 		if nameTaken {
 			t := fmt.Sprintf("Portfolio with name '%s' already exists, try another name.", pName)
-			return s.sendTemporaryMessage(
-				tgbotapi.NewMessage(msg.Chat.ID,
-					t),
-				tgUserID,
-				10*time.Second,
-			)
+			return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID, t),
+				tgUserID, 15*time.Second)
 		}
 
 		s.sessions.setTempField(tgUserID, "TempPortfolioName", pName)
@@ -167,10 +162,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		return s.editMessageText(msg.Chat.ID, p.BotMessageID, t)
 
 	case "waiting_portfolio_description":
-		// p, _ := s.sessions.getSessionVars(tgUserID)
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, p.BotMessageID))
-		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
-
 		portfolioDesc := msg.Text
 
 		err = s.store.CreatePortfolio(ctx, dbUserID, p.TempPortfolioName, portfolioDesc)
@@ -180,29 +172,21 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 
 		s.sessions.clearSession(tgUserID)
 
-		// return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID,
-		// 	"Portfolio created successfully!"),
-		// 	tgUserID,
-		// 	10*time.Second)
-
 		err := s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID,
 			"Portfolio created successfully!"), tgUserID, 10*time.Second)
 		if err != nil {
-			return nil
+			return err
 		}
 		return s.showMainMenu(msg.Chat.ID, tgUserID)
 
 	case "waiting_for_new_portfolio_name":
-		// p, _ := s.sessions.getSessionVars(tgUserID)
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, p.BotMessageID))
-		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
-
 		pName := s.prettyPortfolioName(msg.Text)
 		s.sessions.setTempField(tgUserID, "TempPortfolioName", pName)
-		return s.askRenamePortfolioConfirmation(msg.Chat.ID, tgUserID, p.BotMessageID, p.SelectedPortfolioName, pName)
+
+		return s.askPortfolioConfirmation(msg.Chat.ID, tgUserID, p.BotMessageID, "rename_portfolio", p.SelectedPortfolioName, pName)
 
 	case "main_menu":
-		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
 		text := msg.Text
 
 		switch text {

@@ -188,46 +188,9 @@ func (s *Store) PortfolioNameExists(ctx context.Context, userID int64, portfolio
 	return false, fmt.Errorf("exec PortfolioNameExists query: %w", err)
 }
 
-func (s *Store) GetPortfolios(ctx context.Context, userID int64) ([]string, error) {
-	query, args, err := s.sqlBuilder.
-		Select("name").
-		From("portfolios").
-		Where(sq.Eq{
-			"user_id": userID,
-		}).
-		ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("build GetPortfolios query: %w", err)
-	}
-
-	rows, err := s.DB.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("exec GetPortfolios query: %w", err)
-	}
-	defer rows.Close()
-
-	var pNames []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("scan GetPortfolios result: %w", err)
-		}
-		pNames = append(pNames, name)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration error: %w", err)
-	}
-
-	return pNames, nil
-}
-
 // func (db *sql.DB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 
-func (s *Store) GfDeletePortfolio(ctx context.Context, dbUserID int64, portfolioName string) error {
-	// r, _ := s.sessions.getSessionVars(tgUserID)
-	// fmt.Println("portfilio to delete: ", r.SelectedPortfolioName)
-
+func (s *Store) DeletePortfolio(ctx context.Context, dbUserID int64, portfolioName string) error {
 	query, args, err := s.sqlBuilder.
 		Delete("portfolios").
 		Where(sq.Eq{
@@ -246,7 +209,7 @@ func (s *Store) GfDeletePortfolio(ctx context.Context, dbUserID int64, portfolio
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		log.Warnf("no portfolio deleted for user_id=%d, p_name=%s", dbUserID, portfolioName)
+		log.Warnf("no portfolio deleted for user_id=%d, portfolio_name=%s", dbUserID, portfolioName)
 	}
 
 	return nil
@@ -276,7 +239,52 @@ func (s *Store) GetDefaultPortfolio(ctx context.Context, dbUserID int64) (string
 	return dpName, nil
 }
 
-func (s *Store) RenamePortfolio(ctx context.Context, dbUserID int64, oldName, newName string) error {
+func (s *Store) GetPortfoliosFiltered(
+	ctx context.Context,
+	dbUserID int64,
+	onlyNonDefault bool,
+) ([]string, error) {
+	builder := s.sqlBuilder.
+		Select("name").
+		From("portfolios").
+		Where(sq.Eq{"user_id": dbUserID})
+
+	if onlyNonDefault {
+		builder = builder.Where(sq.Eq{"is_default": false})
+	}
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build GetPortfoliosFiltered query: %w", err)
+	}
+
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec GetPortfoliosFiltered query: %w", err)
+	}
+	defer rows.Close()
+
+	var portfolios []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan GetPortfoliosFiltered result: %w", err)
+		}
+		portfolios = append(portfolios, name)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return portfolios, nil
+}
+
+func (s *Store) RenamePortfolio(
+	ctx context.Context,
+	dbUserID int64,
+	oldName, newName string,
+) error {
 	query, args, err := s.sqlBuilder.
 		Update("portfolios").
 		Set("name", newName).
@@ -304,5 +312,57 @@ func (s *Store) RenamePortfolio(ctx context.Context, dbUserID int64, oldName, ne
 	}
 
 	log.Infof("portfolio renamed: user_id=%d, from=%s to=%s", dbUserID, oldName, newName)
+	return nil
+}
+
+func (s *Store) ChangeDefaultPortfolio(
+	ctx context.Context,
+	dbUserID int64,
+	portfolioName string,
+) error {
+	resetQuery, resetArgs, err := s.sqlBuilder.
+		Update("portfolios").
+		Set("is_default", false).
+		Where(sq.Eq{
+			"user_id": dbUserID,
+		}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build reset default query: %w", err)
+	}
+
+	_, err = s.DB.ExecContext(ctx, resetQuery, resetArgs...)
+	if err != nil {
+		return fmt.Errorf("exec reset default query: %w", err)
+	}
+
+	setQuery, setArgs, err := s.sqlBuilder.
+		Update("portfolios").
+		Set("is_default", true).
+		Where(sq.Eq{
+			"user_id": dbUserID,
+			"name":    portfolioName,
+		}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build set default query: %w", err)
+	}
+
+	result, err := s.DB.ExecContext(ctx, setQuery, setArgs...)
+	if err != nil {
+		return fmt.Errorf("exec set default query: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check affected rows: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("set default failed: no portfolio found with name '%s'", portfolioName)
+	}
+
+	log.Infof("default portfolio changed: user_id=%d, new_default='%s'", dbUserID, portfolioName)
+
 	return nil
 }
