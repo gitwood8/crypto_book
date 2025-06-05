@@ -40,3 +40,12 @@ type Action struct {
 	TgText       string
 	CallBackName string
 }
+
+type TempTransactionData struct {
+	Pair            string
+	AssetAmount     string
+	AssetPrice      string
+	USDAmount       string
+	TransactionDate string
+	Note            string
+}

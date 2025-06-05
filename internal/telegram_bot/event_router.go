@@ -2,58 +2,12 @@ package telegram_bot
 
 import (
 	"context"
-	"fmt"
 	"strings"
-	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
 	"gitlab.com/avolkov/wood_post/pkg/log"
 )
-
-func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) error {
-	// log.Info(update.CallbackQuery)
-	switch {
-	case update.Message != nil && update.Message.Text == "/start":
-		return s.handleStart(ctx, update.Message)
-
-	// case update.Message != nil && update.Message.Text == "jopa":
-	// 	mainMenu := tgbotapi.NewMessage(update.Message.Chat.ID, "Welcome back! What would you like to do?")
-	// 	mainMenu.ReplyMarkup = tgbotapi.NewReplyKeyboard(
-	// 		tgbotapi.NewKeyboardButtonRow(
-	// 			tgbotapi.NewKeyboardButton("Portfolios"),
-	// 			tgbotapi.NewKeyboardButton("New Portfolio"),
-	// 		),
-	// 		tgbotapi.NewKeyboardButtonRow(
-	// 			tgbotapi.NewKeyboardButton("Help"),
-	// 		),
-	// 	)
-	// 	return s.sendTemporaryMessage(mainMenu, update.Message.From.ID, 15*time.Second)
-
-	case update.Message != nil && update.Message.Text == "qwe":
-		// fmt.Println(update.Message.Text)
-		resp := tgbotapi.NewMessage(update.Message.Chat.ID, "jopa")
-		err := s.sendTgMessage(resp, update.Message.From.ID)
-		if err != nil {
-			return err
-		}
-		p, _ := s.sessions.getSessionVars(update.Message.From.ID)
-
-		time.Sleep(3 * time.Second)
-		return s.sendTestMessage(update.Message.Chat.ID, p.BotMessageID, "test passed")
-
-	// catch any callback
-	case update.CallbackQuery != nil:
-		return s.handleCallback(ctx, update.CallbackQuery)
-
-	// catch any message
-	case update.Message != nil:
-		// fmt.Println("eqweqweqw")
-		return s.handleMessage(ctx, update.Message)
-	}
-
-	return nil
-}
 
 func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery) error {
 	tgUserID := cb.From.ID
@@ -75,7 +29,7 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 
 	// s.sessions.setState(tgUserID, "who_am_i") // why?
 	// msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Im very cool bot")
-	// return s.sendTemporaryMessage(msg, 15*time.Second)
+	// return s.sendTemporaryMessage(msg, 20*time.Second)
 	// ---------------------------------------------
 
 	// case cb.Data == "gf_portfolios":
@@ -97,7 +51,7 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return s.showDefaultPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID)
 
 	case strings.Contains(cb.Data, "::"):
-		log.Infof("callback data: %s", cb.Data)
+		// log.Infof("callback data: %s", cb.Data)
 		return s.performActionForPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, cb.Data)
 
 	case cb.Data == "confirm_portfolio_deletion":
@@ -111,7 +65,6 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 
 	case cb.Data == "cancel_action":
 		s.sessions.clearSession(tgUserID)
-		// return s.editMessageText(cb.Message.Chat.ID, r.BotMessageID, "")
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(cb.Message.Chat.ID, r.BotMessageID))
 		return s.showMainMenu(cb.Message.Chat.ID, tgUserID)
 	}
@@ -138,53 +91,13 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 
 	switch state {
 	case "waiting_portfolio_name":
-		pName := s.prettyPortfolioName(msg.Text)
-
-		nameTaken, err := s.store.PortfolioNameExists(ctx, dbUserID, pName)
-		if err != nil {
-			log.Errorf("could not check PortfolioNameExists: %s", err)
-			return s.sendTemporaryMessage(
-				tgbotapi.NewMessage(msg.Chat.ID,
-					"Oh, we could not create portfolio for you, please try again."),
-				tgUserID, 15*time.Second)
-		}
-
-		if nameTaken {
-			t := fmt.Sprintf("Portfolio with name '%s' already exists, try another name.", pName)
-			return s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID, t),
-				tgUserID, 15*time.Second)
-		}
-
-		s.sessions.setTempField(tgUserID, "TempPortfolioName", pName)
-		s.sessions.setState(tgUserID, "waiting_portfolio_description")
-
-		t := fmt.Sprintf("Please enter description for portfolio: %s", pName)
-		return s.editMessageText(msg.Chat.ID, p.BotMessageID, t)
+		return s.waitPortfolionName(ctx, msg.Chat.ID, tgUserID, dbUserID, p.BotMessageID, msg.Text)
 
 	case "waiting_portfolio_description":
-		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, p.BotMessageID))
-		portfolioDesc := msg.Text
-
-		err = s.store.CreatePortfolio(ctx, dbUserID, p.TempPortfolioName, portfolioDesc)
-		if err != nil {
-			return fmt.Errorf("failed to create portfolio: %w", err)
-		}
-
-		s.sessions.clearSession(tgUserID)
-
-		err := s.sendTemporaryMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			"Portfolio created successfully!"), tgUserID, 10*time.Second)
-		if err != nil {
-			return err
-		}
-		return s.showMainMenu(msg.Chat.ID, tgUserID)
+		return s.waitPortfolionDescription(ctx, msg.Chat.ID, tgUserID, dbUserID, p.BotMessageID, p.TempPortfolioName, msg.Text)
 
 	case "waiting_for_new_portfolio_name":
-		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, p.BotMessageID))
-		pName := s.prettyPortfolioName(msg.Text)
-		s.sessions.setTempField(tgUserID, "TempPortfolioName", pName)
-
-		return s.askPortfolioConfirmation(msg.Chat.ID, tgUserID, p.BotMessageID, "rename_portfolio", p.SelectedPortfolioName, pName)
+		return s.waitNewPortfolionName(msg.Chat.ID, tgUserID, p.BotMessageID, p.SelectedPortfolioName, msg.Text)
 
 	case "main_menu":
 		text := msg.Text

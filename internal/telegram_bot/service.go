@@ -71,3 +71,47 @@ func (s *Service) Run(ctx context.Context) error {
 		}
 	}
 }
+
+func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) error {
+	// log.Info(update.CallbackQuery)
+	switch {
+	case update.Message != nil && update.Message.Text == "/start":
+		return s.handleStart(ctx, update.Message)
+
+	// case update.Message != nil && update.Message.Text == "jopa":
+	// 	mainMenu := tgbotapi.NewMessage(update.Message.Chat.ID, "Welcome back! What would you like to do?")
+	// 	mainMenu.ReplyMarkup = tgbotapi.NewReplyKeyboard(
+	// 		tgbotapi.NewKeyboardButtonRow(
+	// 			tgbotapi.NewKeyboardButton("Portfolios"),
+	// 			tgbotapi.NewKeyboardButton("New Portfolio"),
+	// 		),
+	// 		tgbotapi.NewKeyboardButtonRow(
+	// 			tgbotapi.NewKeyboardButton("Help"),
+	// 		),
+	// 	)
+	// 	return s.sendTemporaryMessage(mainMenu, update.Message.From.ID, 20*time.Second)
+
+	case update.Message != nil && update.Message.Text == "qwe":
+		// fmt.Println(update.Message.Text)
+		resp := tgbotapi.NewMessage(update.Message.Chat.ID, "jopa")
+		err := s.sendTgMessage(resp, update.Message.From.ID)
+		if err != nil {
+			return err
+		}
+		p, _ := s.sessions.getSessionVars(update.Message.From.ID)
+
+		time.Sleep(3 * time.Second)
+		return s.sendTestMessage(update.Message.Chat.ID, p.BotMessageID, "test passed")
+
+	// catch any callback
+	case update.CallbackQuery != nil:
+		return s.handleCallback(ctx, update.CallbackQuery)
+
+	// catch any message
+	case update.Message != nil:
+		// fmt.Println("eqweqweqw")
+		return s.handleMessage(ctx, update.Message)
+	}
+
+	return nil
+}

@@ -16,6 +16,7 @@ type UserSession struct {
 	SelectedPortfolioName string
 	BotMessageID          int
 	UpdatedAt             time.Time
+	TempTransaction       TempTransactionData
 }
 
 // manage all user's sessions
@@ -87,18 +88,6 @@ func (sm *SessionManager) setTempField(tgUserID int64, field string, value inter
 		log.Errorf("unknown field name: %s", field)
 	}
 }
-
-// return temporary portfolio name
-// func (sm *SessionManager) getTempName(tgUserID int64) (string, bool) {
-// 	sm.mu.RLock()
-// 	defer sm.mu.RUnlock()
-
-// 	session, exists := sm.sessions[tgUserID]
-// 	if !exists {
-// 		return "", false
-// 	}
-// 	return session.TempPortfolioName, true
-// }
 
 func (sm *SessionManager) getSessionVars(tgUserID int64) (*UserSession, bool) {
 	sm.mu.RLock()
