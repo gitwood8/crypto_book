@@ -79,7 +79,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 	state, ok := s.sessions.getState(tgUserID)
 	if !ok {
 		return nil
-	} // why?
+	}
 
 	p, _ := s.sessions.getSessionVars(tgUserID)
 
@@ -109,7 +109,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 
 		case "Transactions":
 			log.Infof("main menu: %s", text)
-			return nil
+			return s.gfTransactionsMain(msg.Chat.ID, tgUserID, p.BotMessageID)
 		}
 	}
 

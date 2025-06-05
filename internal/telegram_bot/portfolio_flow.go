@@ -312,7 +312,6 @@ func (s *Service) performActionForPortfolio(
 	}
 }
 
-// TODO: cut characters if name is longer then ...
 func (s *Service) prettyPortfolioName(portfolioName string) string {
 	r := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
 	pName := r.ReplaceAllString(strings.ReplaceAll(portfolioName, " ", "_"), "")

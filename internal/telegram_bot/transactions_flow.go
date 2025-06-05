@@ -10,7 +10,7 @@ func (s *Service) gfTransactionsMain(chatID, tgUserID int64, BotMsgID int) error
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
 	actions := []Action{
-		{"Add transaction", "create_portfolio"},
+		{"Add transaction", "add_transaction"},
 		// {"Delete portfolio", "gf_portfolios_delete"},
 		// {"Get default", "gf_portfolio_get_default"},
 		// {"Change default", "gf_portfolio_change_default"},
