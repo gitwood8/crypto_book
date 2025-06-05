@@ -11,8 +11,8 @@ import (
 	"gitlab.com/avolkov/wood_post/pkg/log"
 )
 
-func (s *Store) CreatePortfolio(ctx context.Context, userID int64, portfolioName string, description string) error {
-	exists, err := s.PortfolioExists(ctx, userID)
+func (s *Store) CreatePortfolio(ctx context.Context, dbUserID int64, portfolioName string, description string) error {
+	exists, err := s.PortfolioExists(ctx, dbUserID)
 	if err != nil {
 		return fmt.Errorf("failed to check portfolio existence: %w", err)
 	}
@@ -22,7 +22,7 @@ func (s *Store) CreatePortfolio(ctx context.Context, userID int64, portfolioName
 	query, args, err := s.sqlBuilder.
 		Insert("portfolios").
 		Columns("user_id", "name", "description", "is_default", "created_at").
-		Values(userID, portfolioName, description, isDefault, time.Now()).
+		Values(dbUserID, portfolioName, description, isDefault, time.Now()).
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("build PortfolioExists query: %w", err)
@@ -33,7 +33,7 @@ func (s *Store) CreatePortfolio(ctx context.Context, userID int64, portfolioName
 		return fmt.Errorf("exec PortfolioExists query: %w", err)
 	}
 
-	log.Infof("portfolio for userID:%d with name: %s created (is_default: %v)", userID, portfolioName, isDefault)
+	log.Infof("portfolio for userID:%d with name: %s created (is_default: %v)", dbUserID, portfolioName, isDefault)
 	return nil
 }
 
@@ -47,13 +47,13 @@ func (s *Store) CreatePortfolio(ctx context.Context, userID int64, portfolioName
 // 	return id, nil
 // }
 
-func (s *Store) PortfolioExists(ctx context.Context, userID int64) (bool, error) {
+func (s *Store) PortfolioExists(ctx context.Context, dbUserID int64) (bool, error) {
 	// only check if row exists, no full scan, no data from table
 	query, args, err := s.sqlBuilder.
 		Select("1").
 		From("portfolios").
 		Where(sq.Eq{
-			"user_id": userID,
+			"user_id": dbUserID,
 		}).
 		Limit(1).
 		ToSql()
@@ -73,13 +73,13 @@ func (s *Store) PortfolioExists(ctx context.Context, userID int64) (bool, error)
 	return true, nil
 }
 
-func (s *Store) ReachedPortfolioLimit(ctx context.Context, userID int64) (bool, error) {
+func (s *Store) ReachedPortfolioLimit(ctx context.Context, dbUserID int64) (bool, error) {
 	var count int
 	query, args, err := s.sqlBuilder.
 		Select("COUNT(*)").
 		From("portfolios").
 		Where(sq.Eq{
-			"user_id": userID,
+			"user_id": dbUserID,
 		}).
 		ToSql()
 	if err != nil {
@@ -91,12 +91,12 @@ func (s *Store) ReachedPortfolioLimit(ctx context.Context, userID int64) (bool, 
 	return count >= 2, nil
 }
 
-func (s *Store) PortfolioNameExists(ctx context.Context, userID int64, portfolioName string) (bool, error) {
+func (s *Store) PortfolioNameExists(ctx context.Context, dbUserID int64, portfolioName string) (bool, error) {
 	query, args, err := s.sqlBuilder.
 		Select("1").
 		From("portfolios").
 		Where(sq.Eq{
-			"user_id": userID,
+			"user_id": dbUserID,
 			"name":    portfolioName,
 		}).
 		Limit(1).

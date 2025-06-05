@@ -79,7 +79,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 	state, ok := s.sessions.getState(tgUserID)
 	if !ok {
 		return nil
-	}
+	} // why?
 
 	p, _ := s.sessions.getSessionVars(tgUserID)
 
@@ -97,7 +97,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		return s.waitPortfolionDescription(ctx, msg.Chat.ID, tgUserID, dbUserID, p.BotMessageID, p.TempPortfolioName, msg.Text)
 
 	case "waiting_for_new_portfolio_name":
-		return s.waitNewPortfolionName(msg.Chat.ID, tgUserID, p.BotMessageID, p.SelectedPortfolioName, msg.Text)
+		return s.waitNewPortfolionName(ctx, msg.Chat.ID, tgUserID, dbUserID, p.BotMessageID, p.SelectedPortfolioName, msg.Text)
 
 	case "main_menu":
 		text := msg.Text

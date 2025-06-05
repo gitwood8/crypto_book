@@ -320,7 +320,9 @@ func (s *Service) prettyPortfolioName(portfolioName string) string {
 	ru := regexp.MustCompile(`_+`)
 	pName = ru.ReplaceAllString(strings.ToLower(pName), "_")
 
-	pName = pName[:40]
+	if len(pName) > 40 {
+		pName = pName[:40]
+	}
 
 	return pName
 }
@@ -409,12 +411,26 @@ func (s *Service) waitPortfolionDescription(
 }
 
 func (s *Service) waitNewPortfolionName(
-	chatID, tgUserID int64,
+	ctx context.Context,
+	chatID, tgUserID, dbUserID int64,
 	BotMsgID int,
 	SelectedPortfolioName, msgText string,
 ) error {
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 	pName := s.prettyPortfolioName(msgText)
+
+	nameTaken, err := s.store.PortfolioNameExists(ctx, dbUserID, pName)
+	if err != nil {
+		return fmt.Errorf("failed to check portfolio existence: %w", err)
+	}
+
+	if nameTaken {
+		msg := fmt.Sprintf("Portfolio with name '%s' already exists, try another name.", pName)
+		return s.sendTemporaryMessage(
+			tgbotapi.NewMessage(chatID, msg),
+			tgUserID, 20*time.Second)
+	}
+
 	s.sessions.setTempField(tgUserID, "TempPortfolioName", pName)
 
 	return s.askPortfolioConfirmation(
