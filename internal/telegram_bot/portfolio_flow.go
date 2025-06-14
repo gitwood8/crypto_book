@@ -235,13 +235,24 @@ func (s *Service) gfPortfoliosMain(chatID, tgUserID int64, BotMsgID int) error {
 		{"Get default", "gf_portfolio_get_default"},
 		{"Change default", "gf_portfolio_change_default"},
 		{"Rename", "gf_portfolio_rename"},
+		{"Back to main menu", "cancel_action"},
 	}
 
 	var rows [][]tgbotapi.InlineKeyboardButton
-	for _, a := range actions {
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(a.TgText, a.CallBackName),
-		))
+	// for _, a := range actions {
+	// 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+	// 		tgbotapi.NewInlineKeyboardButtonData(a.TgText, a.CallBackName),
+	// 	))
+	// }
+
+	for i := 0; i < len(actions); i += 2 {
+		row := []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData(actions[i].TgText, actions[i].CallBackName),
+		}
+		if i+1 < len(actions) {
+			row = append(row, tgbotapi.NewInlineKeyboardButtonData(actions[i+1].TgText, actions[i+1].CallBackName))
+		}
+		rows = append(rows, row)
 	}
 
 	msg := tgbotapi.NewMessage(chatID, "Choose an action:")

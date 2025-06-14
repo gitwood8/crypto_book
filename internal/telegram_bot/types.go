@@ -43,9 +43,9 @@ type Action struct {
 
 type TempTransactionData struct {
 	Pair            string
-	AssetAmount     string
-	AssetPrice      string
-	USDAmount       string
+	AssetAmount     float64
+	AssetPrice      float64
+	USDAmount       float64
 	TransactionDate string
 	Note            string
 }

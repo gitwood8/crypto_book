@@ -63,6 +63,11 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	case cb.Data == "confirm_portfolio_change_default":
 		return s.portfolioChangeDefaultConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, r.SelectedPortfolioName)
 
+		// ------- TRANSACTIONS -------
+	case cb.Data == "gf_add_transaction":
+		return s.askTransactionPair(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
+
+		// ------- TRANSACTIONS -------
 	case cb.Data == "cancel_action":
 		s.sessions.clearSession(tgUserID)
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(cb.Message.Chat.ID, r.BotMessageID))
@@ -98,6 +103,18 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 
 	case "waiting_for_new_portfolio_name":
 		return s.waitNewPortfolionName(ctx, msg.Chat.ID, tgUserID, dbUserID, p.BotMessageID, p.SelectedPortfolioName, msg.Text)
+
+	case "waiting_transaction_pair":
+		return s.askTransactionAssetAmount(msg.Chat.ID, tgUserID, p.BotMessageID, msg.Text)
+
+	case "waiting_transaction_asset_amount":
+		return s.askTransactionAssetPrice(msg.Chat.ID, tgUserID, p.BotMessageID, msg.Text)
+
+	case "waiting_transaction_asset_price":
+		return s.askTransactionDate(msg.Chat.ID, tgUserID, p.BotMessageID, msg.Text)
+
+	// case "waiting_transaction_asset_date":
+	// 	return s.askTransactionDate(msg.Chat.ID, tgUserID, p.BotMessageID, msg.Text)
 
 	case "main_menu":
 		text := msg.Text
