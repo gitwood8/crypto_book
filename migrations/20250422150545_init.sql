@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     type TEXT NOT NULL CHECK (type IN ('buy', 'sell', 'transfer')),
     pair TEXT NOT NULL,
     asset_amount NUMERIC(18,8) NOT NULL,
-    asset_price NUMERIC(18,8),
+    asset_price NUMERIC(18,8), NOT NULL,
     amount_usd NUMERIC(12,2) NOT NULL,
     transaction_date TIMESTAMP NOT NULL,
     note TEXT,

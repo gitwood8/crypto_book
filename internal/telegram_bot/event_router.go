@@ -86,7 +86,10 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		return nil
 	}
 
-	p, _ := s.sessions.getSessionVars(tgUserID)
+	sv, ok := s.sessions.getSessionVars(tgUserID)
+	if !ok {
+		return nil
+	}
 
 	//TODO: i can add tgID to temp field to avoid db requests every time
 	dbUserID, err := s.store.GetUserIDByTelegramID(ctx, msg.From.ID)
@@ -96,25 +99,25 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 
 	switch state {
 	case "waiting_portfolio_name":
-		return s.waitPortfolionName(ctx, msg.Chat.ID, tgUserID, dbUserID, p.BotMessageID, msg.Text)
+		return s.waitPortfolionName(ctx, msg.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, msg.Text)
 
 	case "waiting_portfolio_description":
-		return s.waitPortfolionDescription(ctx, msg.Chat.ID, tgUserID, dbUserID, p.BotMessageID, p.TempPortfolioName, msg.Text)
+		return s.waitPortfolionDescription(ctx, msg.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, sv.TempPortfolioName, msg.Text)
 
 	case "waiting_for_new_portfolio_name":
-		return s.waitNewPortfolionName(ctx, msg.Chat.ID, tgUserID, dbUserID, p.BotMessageID, p.SelectedPortfolioName, msg.Text)
+		return s.waitNewPortfolionName(ctx, msg.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, sv.SelectedPortfolioName, msg.Text)
 
 	case "waiting_transaction_pair":
-		return s.askTransactionAssetAmount(msg.Chat.ID, tgUserID, p.BotMessageID, msg.Text)
+		return s.askTransactionAssetAmount(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, sv)
 
 	case "waiting_transaction_asset_amount":
-		return s.askTransactionAssetPrice(msg.Chat.ID, tgUserID, p.BotMessageID, msg.Text)
+		return s.askTransactionAssetPrice(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, sv)
 
 	case "waiting_transaction_asset_price":
-		return s.askTransactionDate(msg.Chat.ID, tgUserID, p.BotMessageID, msg.Text)
+		return s.askTransactionDate(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, sv)
 
-	// case "waiting_transaction_asset_date":
-	// 	return s.askTransactionDate(msg.Chat.ID, tgUserID, p.BotMessageID, msg.Text)
+	case "waiting_transaction_date":
+		return s.TransactionConfirmation(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, sv)
 
 	case "main_menu":
 		text := msg.Text
@@ -122,11 +125,11 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		switch text {
 		case "My portfolios":
 			log.Infof("main menu: %s", text)
-			return s.gfPortfoliosMain(msg.Chat.ID, tgUserID, p.BotMessageID)
+			return s.gfPortfoliosMain(msg.Chat.ID, tgUserID, sv.BotMessageID)
 
 		case "Transactions":
 			log.Infof("main menu: %s", text)
-			return s.gfTransactionsMain(msg.Chat.ID, tgUserID, p.BotMessageID)
+			return s.gfTransactionsMain(msg.Chat.ID, tgUserID, sv.BotMessageID)
 		}
 	}
 

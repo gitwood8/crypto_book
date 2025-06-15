@@ -1,5 +1,7 @@
 package telegram_bot
 
+import "time"
+
 type ConfirmationTemplate struct {
 	MessageText     string
 	ConfirmText     string
@@ -46,6 +48,6 @@ type TempTransactionData struct {
 	AssetAmount     float64
 	AssetPrice      float64
 	USDAmount       float64
-	TransactionDate string
-	Note            string
+	TransactionDate time.Time
+	// Note            string
 }

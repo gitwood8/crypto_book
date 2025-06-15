@@ -40,7 +40,7 @@ func (s *Service) gfTransactionsMain(chatID, tgUserID int64, BotMsgID int) error
 func (s *Service) askTransactionPair(chatID, tgUserID int64, BotMsgID int) error {
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 	msg := tgbotapi.NewMessage(chatID,
-		"Please enter a currency pair (example: BTCUSDT, ETHUSDT etc. 'btc usdt' - also fine.)")
+		"Please enter a currency pair (example: BTCUSDT, ETHUSDT etc. 'btc usdt' - also fine).")
 	msg.ParseMode = "Markdown"
 
 	s.sessions.setState(tgUserID, "waiting_transaction_pair")
@@ -51,6 +51,7 @@ func (s *Service) askTransactionAssetAmount(
 	chatID, tgUserID int64,
 	BotMsgID int,
 	msgText string,
+	session *UserSession,
 ) error {
 	fmt.Println("pair", msgText)
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
@@ -63,13 +64,10 @@ func (s *Service) askTransactionAssetAmount(
 		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 	}
 
-	pair := result.(string)
-
-	session, _ := s.sessions.getSessionVars(tgUserID)
-	session.TempTransaction.Pair = pair
+	session.TempTransaction.Pair = result.(string)
 
 	msg := tgbotapi.NewMessage(chatID,
-		"Enter the asset amount (example: 1234, 12.34)")
+		"Enter the asset amount (example: 1234, 12.34).")
 	msg.ParseMode = "Markdown"
 
 	s.sessions.setState(tgUserID, "waiting_transaction_asset_amount")
@@ -80,6 +78,7 @@ func (s *Service) askTransactionAssetPrice(
 	chatID, tgUserID int64,
 	BotMsgID int,
 	msgText string,
+	session *UserSession,
 ) error {
 	fmt.Println("amount", msgText)
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
@@ -92,14 +91,12 @@ func (s *Service) askTransactionAssetPrice(
 		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 	}
 
-	amount := result.(float64)
-	fmt.Printf("amountFloat: %s\n", reflect.TypeOf(amount))
+	fmt.Printf("amountFloat: %s\n", reflect.TypeOf(result))
 
-	session, _ := s.sessions.getSessionVars(tgUserID)
-	session.TempTransaction.AssetAmount = amount
+	session.TempTransaction.AssetAmount = result.(float64)
 
 	msg := tgbotapi.NewMessage(chatID,
-		"Enter the asset price (for example, bought BTC for a 15500 usdt)")
+		"Enter the asset price (e.g. bought BTC for a 15500 usdt).")
 	msg.ParseMode = "Markdown"
 
 	s.sessions.setState(tgUserID, "waiting_transaction_asset_price")
@@ -110,21 +107,13 @@ func (s *Service) askTransactionDate(
 	chatID, tgUserID int64,
 	BotMsgID int,
 	msgText string,
+	session *UserSession,
 ) error {
 	fmt.Println("price", msgText)
-	// fmt.Printf("msgText: %s\n", reflect.TypeOf(msgText))
 
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	// priceStr := strings.TrimSpace(msgText)
-	// priceFloat, _ := strconv.ParseFloat(priceStr, 64)
-
-	// fmt.Printf("amountFloat: %s\n", reflect.TypeOf(priceFloat))
-
-	// session, _ := s.sessions.getSessionVars(tgUserID)
-	// session.TempTransaction.AssetAmount = float64(priceFloat)
-
-	result, err := s.transactionValidateInput(msgText, "amount")
+	result, err := s.transactionValidateInput(msgText, "price")
 	if err != nil {
 		errorText := result.(string)
 		msg := tgbotapi.NewMessage(chatID, errorText)
@@ -132,17 +121,68 @@ func (s *Service) askTransactionDate(
 		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 	}
 
-	price := result.(float64)
-	fmt.Printf("amountFloat: %s\n", reflect.TypeOf(price))
+	fmt.Printf("amountFloat: %s\n", reflect.TypeOf(result))
 
-	session, _ := s.sessions.getSessionVars(tgUserID)
-	session.TempTransaction.AssetAmount = price
+	session.TempTransaction.AssetPrice = result.(float64)
 
 	msg := tgbotapi.NewMessage(chatID,
-		"Enter the asset price (for example, bought BTC for a 15500 usdt)")
+		"Enter the transaction date in format *YYYY-MM-DD* (example: 2025-06-15)")
 	msg.ParseMode = "Markdown"
 
-	s.sessions.setState(tgUserID, "waiting_transaction_asset_date")
+	s.sessions.setState(tgUserID, "waiting_transaction_date")
+	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
+}
+
+func (s *Service) TransactionConfirmation(
+	chatID, tgUserID int64,
+	BotMsgID int,
+	msgText string,
+	session *UserSession,
+) error {
+	fmt.Println("date", msgText)
+
+	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
+
+	result, err := s.transactionValidateInput(msgText, "date")
+	if err != nil {
+		errorText := result.(string)
+		msg := tgbotapi.NewMessage(chatID, errorText)
+		msg.ParseMode = "Markdown"
+		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
+	}
+
+	fmt.Printf("amountFloat: %s\n", reflect.TypeOf(result))
+
+	session.TempTransaction.TransactionDate = result.(time.Time)
+
+	session.TempTransaction.USDAmount =
+		session.TempTransaction.AssetAmount * session.TempTransaction.AssetPrice
+
+	tableText := fmt.Sprintf(
+		"*You are about to add a new transaction. Please confirm:*\n\n"+
+			"```\n"+
+			"| %-12s | %-13s | %-11s | %-10s | %-10s |\n"+
+			"|--------------+---------------+-------------+------------+------------|\n"+
+			"| %-12s | %-13.4f | %-11.4f | %-10.2f | %-10s |\n"+
+			"```",
+		"Pair", "Asset Amount", "Asset Price", "USD Amount", "Date",
+		session.TempTransaction.Pair,
+		session.TempTransaction.AssetAmount,
+		session.TempTransaction.AssetPrice,
+		session.TempTransaction.USDAmount,
+		session.TempTransaction.TransactionDate.Format("2006-01-02"),
+	)
+
+	msg := tgbotapi.NewMessage(chatID, tableText)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Confirm", "confirm_transaction"),
+			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+		),
+	)
+	msg.ParseMode = "Markdown"
+
+	s.sessions.setState(tgUserID, "waiting_transaction_confirmation")
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 }
 
@@ -158,18 +198,28 @@ func (s *Service) transactionValidateInput(rawText string, inputType string) (an
 
 		validRe := regexp.MustCompile(`^[A-Z]{5,12}$`)
 		if !validRe.MatchString(cleaned) {
-			return "Wrong data provided for *'pair'*. Only characters allowed. Example: 'btc usdt', 'ETHUSDT'. Please try again",
+			return "Wrong data provided for *'pair'*. Only characters allowed (e.g. 'btc usdt', 'ETHUSDT'). Please try again.",
 				fmt.Errorf("invalid data")
 		}
 		return cleaned, nil
 
 	case "amount", "price":
 		if !regexp.MustCompile(`^\d+(\.\d+)?$`).MatchString(text) {
-			return fmt.Sprintf("Wrong data provided for *'%s'*. Only digits allowed. Example: 1234, 12.34. Please try again", inputType),
+			return fmt.Sprintf("Wrong data provided for *'%s'*. Only digits allowed (e.g. 1234, 12.34). Please try again.", inputType),
 				fmt.Errorf("invalid data")
 		}
 		val, _ := strconv.ParseFloat(text, 64)
 		return val, nil
+
+	case "date":
+		if !regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`).MatchString(text) {
+			return "Wrong date format. Please use YYYY-MM-DD (e.g. 2024-06-14).", fmt.Errorf("invalid date format")
+		}
+		parsedTime, err := time.Parse("2006-01-02", text)
+		if err != nil {
+			return "Could not parse the date. Please try again", err
+		}
+		return parsedTime, nil
 
 	default:
 		return nil, fmt.Errorf("unknown input type")
