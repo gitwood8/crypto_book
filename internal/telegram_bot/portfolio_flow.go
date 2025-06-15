@@ -96,6 +96,7 @@ func (s *Service) ShowPortfolios(
 	msg := tgbotapi.NewMessage(chatID, "Select a portfolio to perform an action:")
 	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+	// TODO: add Back button
 
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 }
@@ -286,7 +287,7 @@ func (s *Service) performActionForPortfolio(
 			_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
 			msg := tgbotapi.NewMessage(chatID,
-				fmt.Sprintf("You cannot delete *default* portfolio *%s*. Change default one first.", portfolio))
+				fmt.Sprintf("You cannot delete *default* portfolio '*%s*'. Change default one first.", portfolio))
 			msg.ParseMode = "Markdown"
 			msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 				tgbotapi.NewInlineKeyboardRow(
@@ -308,6 +309,11 @@ func (s *Service) performActionForPortfolio(
 			chatID,
 			fmt.Sprintf("Please enter a new name for portfolio *'%s'* without special characters.", portfolio))
 		msg.ParseMode = "Markdown"
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
+			),
+		)
 
 		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 
@@ -357,6 +363,9 @@ func (s *Service) showDefaultPortfolio(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("Change default", "gf_portfolio_change_default"),
 			tgbotapi.NewInlineKeyboardButtonData("Rename", fmt.Sprintf("rename::%s", pName)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
 		),
 	)
 

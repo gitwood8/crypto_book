@@ -44,6 +44,11 @@ func (s *Service) askTransactionPair(chatID, tgUserID int64, BotMsgID int) error
 	msg := tgbotapi.NewMessage(chatID,
 		"Please enter a currency pair (e.g. BTCUSDT, ETHUSDT etc. 'btc usdt' - also fine).")
 	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+		),
+	)
 
 	s.sessions.setState(tgUserID, "waiting_transaction_pair")
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
@@ -71,6 +76,11 @@ func (s *Service) askTransactionAssetAmount(
 	msg := tgbotapi.NewMessage(chatID,
 		"Enter the asset amount (e.g. 1234, 12.34).")
 	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+		),
+	)
 
 	s.sessions.setState(tgUserID, "waiting_transaction_asset_amount")
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
@@ -100,6 +110,11 @@ func (s *Service) askTransactionAssetPrice(
 	msg := tgbotapi.NewMessage(chatID,
 		"Enter the asset price (e.g. bought BTC for a 15500 usdt).")
 	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+		),
+	)
 
 	s.sessions.setState(tgUserID, "waiting_transaction_asset_price")
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
