@@ -154,18 +154,43 @@ func (s *Store) GetDefaultPortfolio(ctx context.Context, dbUserID int64) (string
 		}).
 		ToSql()
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", err
-		}
 		return "", fmt.Errorf("build GetDefaultPortfolio query: %w", err)
 	}
 
 	var dpName string
 	err = s.DB.QueryRowContext(ctx, query, args...).Scan(&dpName)
+
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
 		return "", fmt.Errorf("exec GetDefaultPortfolio query: %w", err)
 	}
 	return dpName, nil
+}
+
+func (s *Store) GetDefaultPortfolioID(ctx context.Context, dbUserID int64) (int, error) {
+	query, args, err := s.sqlBuilder.
+		Select("id").
+		From("portfolios").
+		Where(sq.Eq{
+			"user_id":    dbUserID,
+			"is_default": true,
+		}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("build GetDefaultPortfolioID query: %w", err)
+	}
+
+	var dpID int
+	err = s.DB.QueryRowContext(ctx, query, args...).Scan(&dpID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, err
+		}
+		return 0, fmt.Errorf("exec GetDefaultPortfolioID query: %w", err)
+	}
+	return dpID, nil
 }
 
 func (s *Store) GetPortfoliosFiltered(

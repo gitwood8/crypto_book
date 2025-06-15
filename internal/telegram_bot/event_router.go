@@ -9,8 +9,8 @@ import (
 	"gitlab.com/avolkov/wood_post/pkg/log"
 )
 
-func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery) error {
-	tgUserID := cb.From.ID
+func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery, sv *UserSession, tgUserID int64) error {
+	// tgUserID := cb.From.ID
 	// TODO: check this log
 
 	dbUserID, err := s.store.GetUserIDByTelegramID(ctx, tgUserID)
@@ -18,7 +18,6 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return errors.Wrap(err, "failed to get user from DB")
 	}
 
-	r, _ := s.sessions.getSessionVars(tgUserID)
 	log.Infof("user_id: %d, selected callback: %s", dbUserID, cb.Data)
 
 	switch {
@@ -37,40 +36,43 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 
 	case cb.Data == "gf_portfolios_delete":
 		s.sessions.setTempField(tgUserID, "NextAction", "delete")
-		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, "delete")
+		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, "delete")
 
 	case cb.Data == "gf_portfolio_rename":
 		s.sessions.setTempField(tgUserID, "NextAction", "rename")
-		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, "rename")
+		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, "rename")
 
 	case cb.Data == "gf_portfolio_change_default":
 		s.sessions.setTempField(tgUserID, "NextAction", "change_default")
-		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, "change_default")
+		return s.ShowPortfolios(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, "change_default")
 
 	case cb.Data == "gf_portfolio_get_default":
-		return s.showDefaultPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID)
+		return s.showDefaultPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
 
 	case strings.Contains(cb.Data, "::"):
 		// log.Infof("callback data: %s", cb.Data)
-		return s.performActionForPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, cb.Data)
+		return s.performActionForPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, cb.Data)
 
 	case cb.Data == "confirm_portfolio_deletion":
-		return s.portfolioDeletinonConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, r.SelectedPortfolioName)
+		return s.portfolioDeletinonConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, sv.SelectedPortfolioName)
 
 	case cb.Data == "confirm_portfolio_rename":
-		return s.portfolioRenameConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, r.SelectedPortfolioName, r.TempPortfolioName)
+		return s.portfolioRenameConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, sv.SelectedPortfolioName, sv.TempPortfolioName)
 
 	case cb.Data == "confirm_portfolio_change_default":
-		return s.portfolioChangeDefaultConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, r.BotMessageID, r.SelectedPortfolioName)
+		return s.portfolioChangeDefaultConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, sv.SelectedPortfolioName)
 
 		// ------- TRANSACTIONS -------
 	case cb.Data == "gf_add_transaction":
-		return s.askTransactionPair(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
+		return s.askTransactionPair(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
 
-		// ------- TRANSACTIONS -------
+	case cb.Data == "confirm_transaction":
+		return s.transactionConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, &sv.TempTransaction)
+
+	// ------- TRANSACTIONS -------
 	case cb.Data == "cancel_action":
 		s.sessions.clearSession(tgUserID)
-		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(cb.Message.Chat.ID, r.BotMessageID))
+		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(cb.Message.Chat.ID, sv.BotMessageID))
 		return s.showMainMenu(cb.Message.Chat.ID, tgUserID)
 	}
 	// fmt.Println("portfolio, callback: ", action, p)
@@ -78,15 +80,10 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	return nil
 }
 
-func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) error {
-	tgUserID := msg.From.ID
+func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message, sv *UserSession, tgUserID int64) error {
+	// tgUserID := msg.From.ID
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
 	state, ok := s.sessions.getState(tgUserID)
-	if !ok {
-		return nil
-	}
-
-	sv, ok := s.sessions.getSessionVars(tgUserID)
 	if !ok {
 		return nil
 	}
@@ -108,16 +105,16 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message) erro
 		return s.waitNewPortfolionName(ctx, msg.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, sv.SelectedPortfolioName, msg.Text)
 
 	case "waiting_transaction_pair":
-		return s.askTransactionAssetAmount(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, sv)
+		return s.askTransactionAssetAmount(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
 
 	case "waiting_transaction_asset_amount":
-		return s.askTransactionAssetPrice(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, sv)
+		return s.askTransactionAssetPrice(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
 
 	case "waiting_transaction_asset_price":
-		return s.askTransactionDate(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, sv)
+		return s.askTransactionDate(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
 
 	case "waiting_transaction_date":
-		return s.TransactionConfirmation(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, sv)
+		return s.transactionConfirmation(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
 
 	case "main_menu":
 		text := msg.Text

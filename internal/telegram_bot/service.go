@@ -73,7 +73,20 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) error {
-	// log.Info(update.CallbackQuery)
+	var tgUserID int64
+
+	if update.CallbackQuery != nil {
+		tgUserID = update.CallbackQuery.From.ID
+	} else if update.Message != nil {
+		tgUserID = update.Message.From.ID
+	} else {
+		return nil
+	}
+
+	// log.Info(tgUserID)
+
+	userSession, _ := s.sessions.getSessionVars(tgUserID)
+
 	switch {
 	case update.Message != nil && update.Message.Text == "/start":
 		return s.handleStart(ctx, update.Message)
@@ -92,7 +105,6 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 	// 	return s.sendTemporaryMessage(mainMenu, update.Message.From.ID, 20*time.Second)
 
 	case update.Message != nil && update.Message.Text == "qwe":
-		// fmt.Println(update.Message.Text)
 		resp := tgbotapi.NewMessage(update.Message.Chat.ID, "jopa")
 		err := s.sendTgMessage(resp, update.Message.From.ID)
 		if err != nil {
@@ -105,12 +117,11 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 
 	// catch any callback
 	case update.CallbackQuery != nil:
-		return s.handleCallback(ctx, update.CallbackQuery)
+		return s.handleCallback(ctx, update.CallbackQuery, userSession, tgUserID)
 
 	// catch any message
 	case update.Message != nil:
-		// fmt.Println("eqweqweqw")
-		return s.handleMessage(ctx, update.Message)
+		return s.handleMessage(ctx, update.Message, userSession, tgUserID)
 	}
 
 	return nil

@@ -1,8 +1,6 @@
-package telegram_bot
+package types
 
-import "time"
-
-type ConfirmationTemplate struct {
+type ConfirmationTemplateType struct {
 	MessageText     string
 	ConfirmText     string
 	ConfirmCallback string
@@ -11,7 +9,7 @@ type ConfirmationTemplate struct {
 	NextState       string
 }
 
-var confirmationTemplates = map[string]ConfirmationTemplate{
+var ConfirmationTemplates = map[string]ConfirmationTemplateType{
 	"rename_portfolio": {
 		MessageText:     "Are you sure you want to rename portfolio *'%s'* to *'%s'*?",
 		ConfirmText:     "Yes, rename",
@@ -38,16 +36,7 @@ var confirmationTemplates = map[string]ConfirmationTemplate{
 	},
 }
 
-type Action struct {
+type Actiontype struct {
 	TgText       string
 	CallBackName string
-}
-
-type TempTransactionData struct {
-	Pair            string
-	AssetAmount     float64
-	AssetPrice      float64
-	USDAmount       float64
-	TransactionDate time.Time
-	// Note            string
 }

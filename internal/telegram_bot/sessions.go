@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gitlab.com/avolkov/wood_post/pkg/log"
+	t "gitlab.com/avolkov/wood_post/pkg/types"
 )
 
 // setState updates the user's session state and refreshes session timestamp.
@@ -16,7 +17,7 @@ type UserSession struct {
 	SelectedPortfolioName string
 	BotMessageID          int
 	UpdatedAt             time.Time
-	TempTransaction       TempTransactionData
+	TempTransaction       t.TempTransactionData
 }
 
 // manage all user's sessions

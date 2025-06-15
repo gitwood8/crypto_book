@@ -9,6 +9,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"gitlab.com/avolkov/wood_post/pkg/log"
+	t "gitlab.com/avolkov/wood_post/pkg/types"
 )
 
 func (s *Service) checkBeforeCreatePortfolio(
@@ -108,7 +109,7 @@ func (s *Service) askPortfolioConfirmation(
 	deleteMsg := tgbotapi.NewDeleteMessage(chatID, BotMsgID)
 	_, _ = s.bot.Request(deleteMsg)
 
-	template, ok := confirmationTemplates[nextAction]
+	template, ok := t.ConfirmationTemplates[nextAction]
 	if !ok {
 		return fmt.Errorf("unknown confirmation template for action: %s", nextAction)
 	}
@@ -229,13 +230,13 @@ func (s *Service) portfolioChangeDefaultConfirmed(
 func (s *Service) gfPortfoliosMain(chatID, tgUserID int64, BotMsgID int) error {
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	actions := []Action{
-		{"New portfolio", "create_portfolio"}, // already exists
-		{"Delete portfolio", "gf_portfolios_delete"},
-		{"Get default", "gf_portfolio_get_default"},
-		{"Change default", "gf_portfolio_change_default"},
-		{"Rename", "gf_portfolio_rename"},
-		{"Back to main menu", "cancel_action"},
+	actions := []t.Actiontype{
+		{TgText: "New portfolio", CallBackName: "create_portfolio"}, // already exists
+		{TgText: "Delete portfolio", CallBackName: "gf_portfolios_delete"},
+		{TgText: "Get default", CallBackName: "gf_portfolio_get_default"},
+		{TgText: "Change default", CallBackName: "gf_portfolio_change_default"},
+		{TgText: "Rename", CallBackName: "gf_portfolio_rename"},
+		{TgText: "Back to main menu", CallBackName: "cancel_action"},
 	}
 
 	var rows [][]tgbotapi.InlineKeyboardButton
