@@ -18,7 +18,7 @@ func (s *Service) gfTransactionsMain(chatID, tgUserID int64, BotMsgID int) error
 
 	actions := []t.Actiontype{
 		{TgText: "Add transaction", CallBackName: "gf_add_transaction"},
-		// {TgText: "Delete portfolio", CallBackName: "gf_portfolios_delete"},
+		{TgText: "Show last 5 added transactions", CallBackName: "gf_portfolios_delete"},
 		// {TgText: "Get default", CallBackName: "gf_portfolio_get_default"},
 		// {TgText: "Change default", CallBackName: "gf_portfolio_change_default"},
 		// {TgText: "Rename", CallBackName: "gf_portfolio_rename"},
@@ -39,16 +39,44 @@ func (s *Service) gfTransactionsMain(chatID, tgUserID int64, BotMsgID int) error
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 }
 
-func (s *Service) askTransactionPair(chatID, tgUserID int64, BotMsgID int) error {
+func (s *Service) askTransactionPair(
+	ctx context.Context,
+	chatID, tgUserID, dbUserID int64,
+	BotMsgID int,
+) error {
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
+
 	msg := tgbotapi.NewMessage(chatID,
 		"Please enter a currency pair (e.g. BTCUSDT, ETHUSDT etc. 'btc usdt' - also fine).")
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
-		),
-	)
+
+	var topPairs []string
+
+	topPairs, err := s.store.GetTopPairsForUser(ctx, dbUserID)
+	if err != nil {
+		return err
+	}
+
+	defaultPairs := []string{"BTCUSDT", "ETHUSDT", "DOGEUSDT"}
+
+	allPairs := s.mergeUniqueTxPairs(defaultPairs, topPairs)
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+	for i := 0; i < len(allPairs); i += 2 {
+		row := []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData(allPairs[i], "tx_pair_chosen_"+allPairs[i]),
+		}
+		if i+1 < len(allPairs) {
+			row = append(row, tgbotapi.NewInlineKeyboardButtonData(allPairs[i+1], "tx_pair_chosen_"+allPairs[i+1]))
+		}
+		rows = append(rows, row)
+	}
+
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+	))
+
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
 
 	s.sessions.setState(tgUserID, "waiting_transaction_pair")
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
@@ -60,16 +88,22 @@ func (s *Service) askTransactionAssetAmount(
 	msgText string,
 	txData *t.TempTransactionData,
 ) error {
-	fmt.Println("pair", msgText)
+	// fmt.Println("raw", msgText)
+	selectedPair := strings.TrimPrefix(msgText, "tx_pair_chosen_")
+
+	// fmt.Println("after trim", selectedPair)
+
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	result, err := s.transactionValidateInput(msgText, "pair")
+	result, err := s.transactionValidateInput(selectedPair, "pair")
 	if err != nil {
 		errorText := result.(string)
 		msg := tgbotapi.NewMessage(chatID, errorText)
 		msg.ParseMode = "Markdown"
 		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 	}
+
+	// fmt.Println("result", result)
 
 	txData.Pair = result.(string)
 
@@ -193,7 +227,7 @@ func (s *Service) transactionConfirmation(
 	msg := tgbotapi.NewMessage(chatID, tableText)
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Confirm", "confirm_transaction"),
+			tgbotapi.NewInlineKeyboardButtonData("Confirm", "tx_confirm_transaction"),
 			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
 		),
 	)
@@ -220,13 +254,17 @@ func (s *Service) transactionConfirmed(
 	if err != nil {
 		return err
 	}
-	return s.sendTemporaryMessage(
+	err = s.sendTemporaryMessage(
 		tgbotapi.NewMessage(
 			chatID,
 			fmt.Sprintf("Transaction added successfully successfully: %s, %.2f USD!", txData.Pair, txData.USDAmount)),
 		tgUserID,
 		20*time.Second)
+	if err != nil {
+		return err
+	}
 
+	return s.showMainMenu(chatID, tgUserID)
 }
 
 func (s *Service) transactionValidateInput(rawText string, inputType string) (any, error) {
@@ -239,7 +277,7 @@ func (s *Service) transactionValidateInput(rawText string, inputType string) (an
 			re.ReplaceAllString(text, ""),
 		)
 
-		validRe := regexp.MustCompile(`^[A-Z]{5,12}$`)
+		validRe := regexp.MustCompile(`^[A-Z]{4,12}$`) // ability to add USDT
 		if !validRe.MatchString(cleaned) {
 			return "Wrong data provided for *'pair'*. Only characters allowed (e.g. 'btc usdt', 'ETHUSDT'). Please try again.",
 				fmt.Errorf("invalid data")
@@ -267,4 +305,18 @@ func (s *Service) transactionValidateInput(rawText string, inputType string) (an
 	default:
 		return nil, fmt.Errorf("unknown input type")
 	}
+}
+
+func (s *Service) mergeUniqueTxPairs(defaultPairs, topPairs []string) []string {
+	unique := make(map[string]struct{})
+	var result []string
+
+	for _, pair := range append(defaultPairs, topPairs...) {
+		// pair = strings.ToUpper(strings.TrimSpace(pair)) // на всякий случай
+		if _, exists := unique[pair]; !exists {
+			unique[pair] = struct{}{}
+			result = append(result, pair)
+		}
+	}
+	return result
 }

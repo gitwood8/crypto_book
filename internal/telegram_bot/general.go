@@ -64,7 +64,7 @@ func (s *Service) showMainMenu(chatID, tgUserID int64) error {
 		),
 	)
 
-	return s.sendTemporaryMessage(mainMenu, chatID, 20*time.Second)
+	return s.sendTemporaryMessage(mainMenu, tgUserID, 20*time.Second)
 }
 
 func (s *Service) sendTgMessage(msg tgbotapi.Chattable, tgUserID int64) error {
