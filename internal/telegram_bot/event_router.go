@@ -64,7 +64,10 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 
 		// ------- TRANSACTIONS -------
 	case cb.Data == "gf_add_transaction":
-		return s.askTransactionPair(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
+		return s.askTransactionType(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
+
+	case strings.Contains(cb.Data, "tx_type_"):
+		return s.askTransactionPair(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, &sv.TempTransaction, cb.Data)
 
 	case cb.Data == "tx_confirm_transaction":
 		return s.transactionConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, &sv.TempTransaction)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"gitlab.com/avolkov/wood_post/pkg/log"
 	t "gitlab.com/avolkov/wood_post/pkg/types"
 )
 
@@ -39,15 +40,47 @@ func (s *Service) gfTransactionsMain(chatID, tgUserID int64, BotMsgID int) error
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 }
 
-func (s *Service) askTransactionPair(
-	ctx context.Context,
-	chatID, tgUserID, dbUserID int64,
+func (s *Service) askTransactionType(
+	chatID, tgUserID int64,
 	BotMsgID int,
 ) error {
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
 	msg := tgbotapi.NewMessage(chatID,
-		"Please enter a currency pair (e.g. BTCUSDT, ETHUSDT etc. 'btc usdt' - also fine).")
+		"Choose what type of transaction do you want to add:")
+	// msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Buy", "tx_type_buy"),
+			tgbotapi.NewInlineKeyboardButtonData("Sell", "tx_type_sell"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+		),
+	)
+
+	s.sessions.setState(tgUserID, "waiting_transaction_type")
+	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
+}
+
+func (s *Service) askTransactionPair(
+	ctx context.Context,
+	chatID, tgUserID, dbUserID int64,
+	BotMsgID int,
+	txData *t.TempTransactionData,
+	txType string,
+) error {
+	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
+
+	log.Info("raw tx type: ", txType)
+
+	txTypeClean := strings.TrimPrefix(txType, "tx_type_")
+	txData.Type = txTypeClean
+
+	log.Info("chosen tx type: ", txTypeClean)
+
+	msg := tgbotapi.NewMessage(chatID,
+		"Please choose a currency pair or enter a new one (e.g. DOGEUSDT, SOLUSDT. 'btc usdt' - also fine).")
 	msg.ParseMode = "Markdown"
 
 	var topPairs []string
@@ -57,7 +90,8 @@ func (s *Service) askTransactionPair(
 		return err
 	}
 
-	defaultPairs := []string{"BTCUSDT", "ETHUSDT", "DOGEUSDT"}
+	// defaultPairs := []string{"BTCUSDT", "ETHUSDT", "DOGEUSDT"}
+	defaultPairs := t.DefaultCryptoPairs
 
 	allPairs := s.mergeUniqueTxPairs(defaultPairs, topPairs)
 
@@ -73,7 +107,7 @@ func (s *Service) askTransactionPair(
 	}
 
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+		tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
 	))
 
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
@@ -88,10 +122,10 @@ func (s *Service) askTransactionAssetAmount(
 	msgText string,
 	txData *t.TempTransactionData,
 ) error {
-	// fmt.Println("raw", msgText)
+	fmt.Println("raw", msgText)
 	selectedPair := strings.TrimPrefix(msgText, "tx_pair_chosen_")
 
-	// fmt.Println("after trim", selectedPair)
+	fmt.Println("after trim", selectedPair)
 
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
@@ -179,6 +213,8 @@ func (s *Service) askTransactionDate(
 	msg := tgbotapi.NewMessage(chatID,
 		"Enter the transaction date in format *YYYY-MM-DD* (e.g. 2025-06-15)")
 	msg.ParseMode = "Markdown"
+
+	// TODO add buttons 'today' 'yesterday'
 
 	s.sessions.setState(tgUserID, "waiting_transaction_date")
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)

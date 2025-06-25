@@ -13,7 +13,7 @@ func (s *Store) AddNewTransaction(ctx context.Context, dbUserID int64, defID int
 
 	query, args, err := s.sqlBuilder.
 		Insert("transactions").
-		Columns("portfolio_id", "pair", "asset_amount", "asset_price", "amount_usd", "transaction_date", "created_at").
+		Columns("portfolio_id", "pair", "asset_amount", "asset_price", "amount_usd", "transaction_date", "type", "created_at").
 		Values(
 			defID,
 			tx.Pair,
@@ -21,6 +21,7 @@ func (s *Store) AddNewTransaction(ctx context.Context, dbUserID int64, defID int
 			tx.AssetPrice,
 			tx.USDAmount,
 			tx.TransactionDate,
+			tx.Type,
 			time.Now(),
 		).
 		ToSql()
@@ -41,7 +42,9 @@ func (s *Store) GetTopPairsForUser(ctx context.Context, dbUserID int64) ([]strin
 		Select("t.pair").
 		From("transactions t").
 		LeftJoin("portfolios p ON p.id = t.portfolio_id").
-		Where(sq.Eq{"p.user_id": dbUserID}).
+		Where(sq.Eq{
+			"p.user_id": dbUserID,
+		}).
 		GroupBy("p.user_id, t.pair").
 		OrderBy("COUNT(t.pair) DESC").
 		Limit(5).
