@@ -11,7 +11,7 @@ import (
 
 func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery, sv *UserSession, tgUserID int64) error {
 	// tgUserID := cb.From.ID
-	// TODO: check this log
+	// FIXME: check this log
 
 	dbUserID, err := s.store.GetUserIDByTelegramID(ctx, tgUserID)
 	if err != nil {
@@ -23,13 +23,9 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	switch {
 	case cb.Data == "create_portfolio":
 		return s.checkBeforeCreatePortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID)
-	// case "who_am_i":
-	// TODO: will be added later
 
-	// s.sessions.setState(tgUserID, "who_am_i") // why?
-	// msg := tgbotapi.NewMessage(cb.Message.Chat.ID, "Im very cool bot")
-	// return s.sendTemporaryMessage(msg, 20*time.Second)
-	// ---------------------------------------------
+	case cb.Data == "who_am_i":
+		return s.showServiceInfo(cb.Message.Chat.ID, tgUserID)
 
 	// case cb.Data == "gf_portfolios":
 	// 	return s.gfPortfoliosMain(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
@@ -63,8 +59,14 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return s.portfolioChangeDefaultConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, sv.SelectedPortfolioName)
 
 		// ------- TRANSACTIONS -------
+	case cb.Data == "gf_transactions_main":
+		return s.gfTransactionsMain(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
+
 	case cb.Data == "gf_add_transaction":
 		return s.askTransactionType(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
+
+	case cb.Data == "gf_show_last_5_transactions":
+		return s.showLast5Transactions(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
 
 	case strings.Contains(cb.Data, "tx_type_"):
 		return s.askTransactionPair(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, &sv.TempTransaction, cb.Data)
@@ -74,6 +76,22 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 
 	case strings.Contains(cb.Data, "tx_pair_chosen_"):
 		return s.askTransactionAssetAmount(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, cb.Data, &sv.TempTransaction)
+
+	// ------- DATE SELECTION -------
+	case cb.Data == "tx_date_today":
+		return s.transactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, "today", &sv.TempTransaction)
+
+	case cb.Data == "tx_date_yesterday":
+		return s.transactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, "yesterday", &sv.TempTransaction)
+
+	case cb.Data == "tx_date_2days":
+		return s.transactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, "2days", &sv.TempTransaction)
+
+	case cb.Data == "tx_date_1week":
+		return s.transactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, "1week", &sv.TempTransaction)
+
+	case cb.Data == "tx_date_1month":
+		return s.transactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, "1month", &sv.TempTransaction)
 
 	// ------- TRANSACTIONS -------
 	case cb.Data == "cancel_action":
@@ -133,6 +151,10 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message, sv *
 		case "Transactions":
 			log.Infof("main menu: %s", text)
 			return s.gfTransactionsMain(msg.Chat.ID, tgUserID, sv.BotMessageID)
+
+		case "Help":
+			log.Infof("main menu: %s", text)
+			return s.showServiceInfo(msg.Chat.ID, tgUserID)
 		}
 	}
 

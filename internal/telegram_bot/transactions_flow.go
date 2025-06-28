@@ -19,7 +19,7 @@ func (s *Service) gfTransactionsMain(chatID, tgUserID int64, BotMsgID int) error
 
 	actions := []t.Actiontype{
 		{TgText: "Add transaction", CallBackName: "gf_add_transaction"},
-		{TgText: "Show last 5 added transactions", CallBackName: "gf_portfolios_delete"},
+		{TgText: "Show last 5 added transactions", CallBackName: "gf_show_last_5_transactions"},
 		// {TgText: "Get default", CallBackName: "gf_portfolio_get_default"},
 		// {TgText: "Change default", CallBackName: "gf_portfolio_change_default"},
 		// {TgText: "Rename", CallBackName: "gf_portfolio_rename"},
@@ -90,7 +90,6 @@ func (s *Service) askTransactionPair(
 		return err
 	}
 
-	// defaultPairs := []string{"BTCUSDT", "ETHUSDT", "DOGEUSDT"}
 	defaultPairs := t.DefaultCryptoPairs
 
 	allPairs := s.mergeUniqueTxPairs(defaultPairs, topPairs)
@@ -206,15 +205,30 @@ func (s *Service) askTransactionDate(
 		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 	}
 
-	fmt.Printf("amountFloat: %s\n", reflect.TypeOf(result))
+	fmt.Printf("priceFloat: %s\n", reflect.TypeOf(result))
 
 	txData.AssetPrice = result.(float64)
 
 	msg := tgbotapi.NewMessage(chatID,
-		"Enter the transaction date in format *YYYY-MM-DD* (e.g. 2025-06-15)")
+		"Select transaction date or enter manually in format *YYYY-MM-DD* (e.g. 2025-06-15):")
 	msg.ParseMode = "Markdown"
-
-	// TODO add buttons 'today' 'yesterday'
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		//FIXME remove unnecessary frames
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Today", "tx_date_today"),
+			tgbotapi.NewInlineKeyboardButtonData("Yesterday", "tx_date_yesterday"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("2 days ago", "tx_date_2days"),
+			tgbotapi.NewInlineKeyboardButtonData("1 week ago", "tx_date_1week"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("1 month ago", "tx_date_1month"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+		),
+	)
 
 	s.sessions.setState(tgUserID, "waiting_transaction_date")
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
@@ -238,23 +252,56 @@ func (s *Service) transactionConfirmation(
 		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 	}
 
-	fmt.Printf("amountFloat: %s\n", reflect.TypeOf(result))
+	fmt.Printf("dateTime: %s\n", reflect.TypeOf(result))
 
 	txData.TransactionDate = result.(time.Time)
 
 	txData.USDAmount =
 		txData.AssetAmount * txData.AssetPrice
 
+	// Old table format (commented out)
+	// tableText := fmt.Sprintf(
+	// 	"*You are about to add a new transaction. Please confirm:*\n\n"+
+	// 		"```\n"+
+	// 		"| %-12s | %-8s | %-13s | %-11s | %-10s | %-10s |\n"+
+	// 		"|--------------+----------+---------------+-------------+------------+------------|\n"+
+	// 		"| %-12s | %-8s | %-13.4f | %-11.4f | %-10.2f | %-10s |\n"+
+	// 		"```",
+	// 	"Pair", "Type", "Asset Amount", "Asset Price", "USD Amount", "Date",
+	// 	txData.Pair,
+	// 	strings.ToUpper(txData.Type),
+	// 	txData.AssetAmount,
+	// 	txData.AssetPrice,
+	// 	txData.USDAmount,
+	// 	txData.TransactionDate.Format("2006-01-02"),
+	// )
+
+	// Determine emoji based on transaction type
+	var typeEmoji string
+	switch strings.ToLower(txData.Type) {
+	case "buy":
+		typeEmoji = "🟢"
+	case "sell":
+		typeEmoji = "🔴"
+	default:
+		typeEmoji = "🔵"
+	}
+
+	// New simplified format
 	tableText := fmt.Sprintf(
 		"*You are about to add a new transaction. Please confirm:*\n\n"+
-			"```\n"+
-			"| %-12s | %-13s | %-11s | %-10s | %-10s |\n"+
-			"|--------------+---------------+-------------+------------+------------|\n"+
-			"| %-12s | %-13.4f | %-11.4f | %-10.2f | %-10s |\n"+
-			"```",
-		"Pair", "Asset Amount", "Asset Price", "USD Amount", "Date",
+			"%s *%s %s*\n"+
+			"Type: `%s`\n"+
+			"Amount: `%.8g %s`\n"+
+			"Price: `$%.2f`\n"+
+			"Total: `$%.2f`\n"+
+			"Date: `%s`\n",
+		typeEmoji,
+		strings.ToUpper(txData.Type),
 		txData.Pair,
+		strings.ToUpper(txData.Type),
 		txData.AssetAmount,
+		s.extractBaseCurrency(txData.Pair),
 		txData.AssetPrice,
 		txData.USDAmount,
 		txData.TransactionDate.Format("2006-01-02"),
@@ -295,7 +342,7 @@ func (s *Service) transactionConfirmed(
 			chatID,
 			fmt.Sprintf("Transaction added successfully successfully: %s, %.2f USD!", txData.Pair, txData.USDAmount)),
 		tgUserID,
-		20*time.Second)
+		10*time.Second)
 	if err != nil {
 		return err
 	}
@@ -308,38 +355,119 @@ func (s *Service) transactionValidateInput(rawText string, inputType string) (an
 
 	switch inputType {
 	case "pair":
-		re := regexp.MustCompile(`[\s/\\]+`)
-		cleaned := strings.ToUpper(
-			re.ReplaceAllString(text, ""),
-		)
+		re := regexp.MustCompile(`[\s/\\-]+`)
+		cleaned := strings.ToUpper(re.ReplaceAllString(text, ""))
 
-		validRe := regexp.MustCompile(`^[A-Z]{4,12}$`) // ability to add USDT
+		// Crypto pair validation: 3-8 chars for base + 3-8 chars for quote
+		validRe := regexp.MustCompile(`^[A-Z]{3,8}[A-Z]{3,8}$`)
 		if !validRe.MatchString(cleaned) {
-			return "Wrong data provided for *'pair'*. Only characters allowed (e.g. 'btc usdt', 'ETHUSDT'). Please try again.",
-				fmt.Errorf("invalid data")
+			return "Wrong pair format. Use format like 'BTCUSDT', 'ETHUSDT', or 'btc usdt'. Only letters allowed, 6-16 characters total.",
+				fmt.Errorf("invalid pair format")
 		}
+
+		//FIXME add sending message to tg
+		// Check if it looks like a real crypto pair (ends with common quote currencies)
+		commonQuotes := []string{"USDT", "USDC", "BTC", "ETH", "BNB", "USD", "EUR"}
+		validPair := false
+		for _, quote := range commonQuotes {
+			if strings.HasSuffix(cleaned, quote) && len(cleaned) > len(quote) {
+				validPair = true
+				break
+			}
+		}
+
+		if !validPair {
+			return fmt.Sprintf("Pair should end with common quote currency: %s. Example: BTCUSDT", strings.Join(commonQuotes, ", ")),
+				fmt.Errorf("invalid quote currency")
+		}
+
 		return cleaned, nil
 
-	case "amount", "price":
-		if !regexp.MustCompile(`^\d+(\.\d+)?$`).MatchString(text) {
-			return fmt.Sprintf("Wrong data provided for *'%s'*. Only digits allowed (e.g. 1234, 12.34). Please try again.", inputType),
-				fmt.Errorf("invalid data")
+	case "amount":
+		if !regexp.MustCompile(`^\d+(\.\d{1,8})?$`).MatchString(text) {
+			return "Wrong amount format. Use numbers with up to 8 decimal places (e.g. 1234, 12.345, 0.00000001).",
+				fmt.Errorf("invalid amount format")
 		}
-		val, _ := strconv.ParseFloat(text, 64)
+
+		val, err := strconv.ParseFloat(text, 64)
+		if err != nil {
+			return "Could not parse amount. Please try again.", err
+		}
+
+		if val <= 0 {
+			return "Amount must be greater than 0.", fmt.Errorf("amount must be positive")
+		}
+		if val > 1000000000 {
+			return "Amount too large. Maximum allowed: 1,000,000,000.", fmt.Errorf("amount too large")
+		}
+		if val < 0.00000001 {
+			return "Amount too small. Minimum allowed: 0.00000001.", fmt.Errorf("amount too small")
+		}
+
 		return val, nil
 
-	case "date":
-		if !regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`).MatchString(text) {
-			return "Wrong date format. Please use YYYY-MM-DD (e.g. 2024-06-14).", fmt.Errorf("invalid date format")
+	case "price":
+		if !regexp.MustCompile(`^\d+(\.\d{1,8})?$`).MatchString(text) {
+			return "Wrong price format. Use numbers with up to 8 decimal places (e.g. 1234, 12.345, 0.00000001).",
+				fmt.Errorf("invalid price format")
 		}
+
+		//FIXME add sending message to tg
+		val, err := strconv.ParseFloat(text, 64)
+		if err != nil {
+			return "Could not parse price. Please try again.", err
+		}
+
+		if val <= 0 {
+			return "Price must be greater than 0.", fmt.Errorf("price must be positive")
+		}
+		if val > 10000000 {
+			return "Price too high. Maximum allowed: 10,000,000.", fmt.Errorf("price too high")
+		}
+		if val < 0.00000001 {
+			return "Price too small. Minimum allowed: 0.00000001.", fmt.Errorf("price too small")
+		}
+
+		return val, nil
+
+		// FIXME week and month looks unnecessary
+
+	case "date":
+		now := time.Now()
+		switch strings.ToLower(text) {
+		case "today":
+			return now, nil
+		case "yesterday":
+			return now.AddDate(0, 0, -1), nil
+		case "2days", "2 days ago":
+			return now.AddDate(0, 0, -2), nil
+		case "1week", "1 week ago":
+			return now.AddDate(0, 0, -7), nil
+		case "1month", "1 month ago":
+			return now.AddDate(0, -1, 0), nil
+		}
+
+		if !regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`).MatchString(text) {
+			return "Wrong date format. Use YYYY-MM-DD (e.g. 2024-06-14) or select a date button.",
+				fmt.Errorf("invalid date format")
+		}
+
 		parsedTime, err := time.Parse("2006-01-02", text)
 		if err != nil {
-			return "Could not parse the date. Please try again", err
+			return "Could not parse the date. Please use YYYY-MM-DD format.", err
 		}
+
+		if parsedTime.After(now.AddDate(0, 0, 1)) {
+			return "Transaction date cannot be in the future.", fmt.Errorf("future date not allowed")
+		}
+		if parsedTime.Before(now.AddDate(-10, 0, 0)) { // 10 years ago
+			return "Transaction date is too old (maximum 10 years ago).", fmt.Errorf("date too old")
+		}
+
 		return parsedTime, nil
 
 	default:
-		return nil, fmt.Errorf("unknown input type")
+		return nil, fmt.Errorf("unknown input type: %s", inputType)
 	}
 }
 
@@ -348,11 +476,120 @@ func (s *Service) mergeUniqueTxPairs(defaultPairs, topPairs []string) []string {
 	var result []string
 
 	for _, pair := range append(defaultPairs, topPairs...) {
-		// pair = strings.ToUpper(strings.TrimSpace(pair)) // на всякий случай
 		if _, exists := unique[pair]; !exists {
 			unique[pair] = struct{}{}
 			result = append(result, pair)
 		}
 	}
 	return result
+}
+
+func (s *Service) showLast5Transactions(
+	ctx context.Context,
+	chatID, tgUserID, dbUserID int64,
+	BotMsgID int,
+) error {
+	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
+
+	transactions, err := s.store.GetLast5TransactionsForUser(ctx, dbUserID)
+	if err != nil {
+		log.Errorf("could not get last 5 transactions: %s", err)
+		return s.sendTemporaryMessage(
+			tgbotapi.NewMessage(chatID,
+				"Sorry, we cannot get your transactions, please try again."),
+			tgUserID,
+			20*time.Second,
+		)
+	}
+
+	if len(transactions) == 0 {
+		msg := tgbotapi.NewMessage(chatID, "You have no transactions yet. Let's add your first one!")
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("Add transaction", "gf_add_transaction"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("Back to main menu", "cancel_action"),
+			),
+		)
+		return s.sendTemporaryMessage(msg, tgUserID, 30*time.Second)
+	}
+
+	// Format transactions in a user-friendly way
+	var messageText strings.Builder
+	messageText.WriteString("*Your Last 5 Transactions:*\n\n")
+
+	for i, tx := range transactions {
+		var typeEmoji string
+		switch strings.ToLower(tx.Type) {
+		case "buy":
+			typeEmoji = "🟢"
+		case "sell":
+			typeEmoji = "🔴"
+		default:
+			typeEmoji = "🔵"
+		}
+
+		messageText.WriteString(fmt.Sprintf(
+			"%s *%s %s*\n"+
+				"Portfolio: `%s`\n"+
+				"Amount: `%.8g %s`\n"+
+				"Price: `$%.2f`\n"+
+				"Total: `$%.2f`\n"+
+				"Date: `%s`\n",
+			typeEmoji,
+			strings.ToUpper(tx.Type),
+			tx.Pair,
+			tx.PortfolioName,
+			tx.AssetAmount,
+			s.extractBaseCurrency(tx.Pair),
+			tx.AssetPrice,
+			tx.USDAmount,
+			tx.TransactionDate.Format("2006-01-02"),
+		))
+
+		// Add note if available
+		if tx.Note != "" {
+			messageText.WriteString(fmt.Sprintf("📝 Note: `%s`\n", tx.Note))
+		}
+
+		// Add separator except for last transaction
+		if i < len(transactions)-1 {
+			messageText.WriteString("\n" + strings.Repeat("─", 17) + "\n\n")
+		}
+	}
+
+	msg := tgbotapi.NewMessage(chatID, messageText.String())
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Add new transaction", "gf_add_transaction"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Back to transactions menu", "gf_transactions_main"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Back to main menu", "cancel_action"),
+		),
+	)
+
+	return s.sendTemporaryMessage(msg, tgUserID, 40*time.Second)
+}
+
+// Helper function to extract base currency from pair ("BTCUSDT" -> "BTC")
+// FIXME useless
+func (s *Service) extractBaseCurrency(pair string) string {
+	commonQuotes := []string{"USDT", "USDC", "USD", "EUR", "BTC", "ETH", "BNB"}
+
+	for _, quote := range commonQuotes {
+		if strings.HasSuffix(pair, quote) && len(pair) > len(quote) {
+			return pair[:len(pair)-len(quote)]
+		}
+	}
+
+	// Fallback: if no common quote found, return first 3-4 characters
+	if len(pair) > 6 {
+		return pair[:len(pair)/2]
+	}
+	return pair
 }

@@ -75,3 +75,65 @@ func (s *Store) GetTopPairsForUser(ctx context.Context, dbUserID int64) ([]strin
 
 	return pairs, nil
 }
+
+// FIXME
+// GetLast5TransactionsForUser retrieves the last 5 transactions for a user with portfolio information
+func (s *Store) GetLast5TransactionsForUser(ctx context.Context, dbUserID int64) ([]t.Transaction, error) {
+	query, args, err := s.sqlBuilder.
+		Select(
+			"t.id",
+			"p.name as portfolio_name",
+			"t.type",
+			"t.pair",
+			"t.asset_amount",
+			"t.asset_price",
+			"t.amount_usd",
+			"t.transaction_date",
+			"COALESCE(t.note, '') as note",
+			"t.created_at",
+		).
+		From("transactions t").
+		LeftJoin("portfolios p ON p.id = t.portfolio_id").
+		Where(sq.Eq{
+			"p.user_id": dbUserID,
+		}).
+		OrderBy("t.created_at DESC").
+		Limit(5).
+		ToSql()
+
+	if err != nil {
+		return nil, fmt.Errorf("build get last 5 transactions query: %w", err)
+	}
+
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec get last 5 transactions query: %w", err)
+	}
+	defer rows.Close()
+
+	var transactions []t.Transaction
+	for rows.Next() {
+		var tx t.Transaction
+		if err := rows.Scan(
+			&tx.ID,
+			&tx.PortfolioName,
+			&tx.Type,
+			&tx.Pair,
+			&tx.AssetAmount,
+			&tx.AssetPrice,
+			&tx.USDAmount,
+			&tx.TransactionDate,
+			&tx.Note,
+			&tx.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan transaction: %w", err)
+		}
+		transactions = append(transactions, tx)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return transactions, nil
+}

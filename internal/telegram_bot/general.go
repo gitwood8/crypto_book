@@ -7,6 +7,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
+	t "gitlab.com/avolkov/wood_post/pkg/types"
 )
 
 func (s *Service) handleStart(ctx context.Context, msg *tgbotapi.Message) error {
@@ -65,6 +66,18 @@ func (s *Service) showMainMenu(chatID, tgUserID int64) error {
 	)
 
 	return s.sendTemporaryMessage(mainMenu, tgUserID, 20*time.Second)
+}
+
+func (s *Service) showServiceInfo(chatID, tgUserID int64) error {
+	msg := tgbotapi.NewMessage(chatID, t.ServiceDescription)
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🔙 Back", "cancel_action"),
+		),
+	)
+
+	return s.sendTemporaryMessage(msg, tgUserID, 200*time.Second)
 }
 
 func (s *Service) sendTgMessage(msg tgbotapi.Chattable, tgUserID int64) error {
