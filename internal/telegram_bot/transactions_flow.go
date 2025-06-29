@@ -41,14 +41,32 @@ func (s *Service) gfTransactionsMain(chatID, tgUserID int64, BotMsgID int) error
 }
 
 func (s *Service) askTransactionType(
-	chatID, tgUserID int64,
+	ctx context.Context,
+	chatID, tgUserID, dbUserID int64,
 	BotMsgID int,
 ) error {
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
+	exists, err := s.store.PortfolioExists(ctx, dbUserID)
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		msg := tgbotapi.NewMessage(chatID, "You have no portfolios yet. Let's create a new one!")
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("New portfolio", "create_portfolio"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
+			),
+		)
+		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
+	}
+
 	msg := tgbotapi.NewMessage(chatID,
 		"Choose what type of transaction do you want to add:")
-	// msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("Buy", "tx_type_buy"),
@@ -135,8 +153,6 @@ func (s *Service) askTransactionAssetAmount(
 		msg.ParseMode = "Markdown"
 		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 	}
-
-	// fmt.Println("result", result)
 
 	txData.Pair = result.(string)
 
@@ -259,7 +275,7 @@ func (s *Service) transactionConfirmation(
 	txData.USDAmount =
 		txData.AssetAmount * txData.AssetPrice
 
-	// Old table format (commented out)
+	// Old table format
 	// tableText := fmt.Sprintf(
 	// 	"*You are about to add a new transaction. Please confirm:*\n\n"+
 	// 		"```\n"+
@@ -276,7 +292,6 @@ func (s *Service) transactionConfirmation(
 	// 	txData.TransactionDate.Format("2006-01-02"),
 	// )
 
-	// Determine emoji based on transaction type
 	var typeEmoji string
 	switch strings.ToLower(txData.Type) {
 	case "buy":
@@ -347,6 +362,8 @@ func (s *Service) transactionConfirmed(
 		return err
 	}
 
+	log.Info("transaction added successfully", "user_id", dbUserID)
+
 	return s.showMainMenu(chatID, tgUserID)
 }
 
@@ -367,19 +384,19 @@ func (s *Service) transactionValidateInput(rawText string, inputType string) (an
 
 		//FIXME add sending message to tg
 		// Check if it looks like a real crypto pair (ends with common quote currencies)
-		commonQuotes := []string{"USDT", "USDC", "BTC", "ETH", "BNB", "USD", "EUR"}
-		validPair := false
-		for _, quote := range commonQuotes {
-			if strings.HasSuffix(cleaned, quote) && len(cleaned) > len(quote) {
-				validPair = true
-				break
-			}
-		}
+		// commonQuotes := []string{"USDT", "USDC", "BTC", "ETH", "BNB", "USD", "EUR"}
+		// validPair := false
+		// for _, quote := range commonQuotes {
+		// 	if strings.HasSuffix(cleaned, quote) && len(cleaned) > len(quote) {
+		// 		validPair = true
+		// 		break
+		// 	}
+		// }
 
-		if !validPair {
-			return fmt.Sprintf("Pair should end with common quote currency: %s. Example: BTCUSDT", strings.Join(commonQuotes, ", ")),
-				fmt.Errorf("invalid quote currency")
-		}
+		// if !validPair {
+		// 	return fmt.Sprintf("Pair should end with common quote currency: %s. Example: BTCUSDT", strings.Join(commonQuotes, ", ")),
+		// 		fmt.Errorf("invalid quote currency")
+		// }
 
 		return cleaned, nil
 

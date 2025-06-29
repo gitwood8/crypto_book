@@ -45,6 +45,9 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	case cb.Data == "gf_portfolio_get_default":
 		return s.showDefaultPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
 
+	case cb.Data == "gf_portfolio_general_report":
+		return s.showPortfolioGeneralReport(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
+
 	case strings.Contains(cb.Data, "::"):
 		// log.Infof("callback data: %s", cb.Data)
 		return s.performActionForPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, cb.Data)
@@ -63,7 +66,7 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return s.gfTransactionsMain(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
 
 	case cb.Data == "gf_add_transaction":
-		return s.askTransactionType(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
+		return s.askTransactionType(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
 
 	case cb.Data == "gf_show_last_5_transactions":
 		return s.showLast5Transactions(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
@@ -92,6 +95,10 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 
 	case cb.Data == "tx_date_1month":
 		return s.transactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, "1month", &sv.TempTransaction)
+
+	// ------- NAVIGATION -------
+	case cb.Data == "portfolios":
+		return s.gfPortfoliosMain(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
 
 	// ------- TRANSACTIONS -------
 	case cb.Data == "cancel_action":

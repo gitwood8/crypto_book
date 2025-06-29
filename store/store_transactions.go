@@ -13,7 +13,17 @@ func (s *Store) AddNewTransaction(ctx context.Context, dbUserID int64, defID int
 
 	query, args, err := s.sqlBuilder.
 		Insert("transactions").
-		Columns("portfolio_id", "pair", "asset_amount", "asset_price", "amount_usd", "transaction_date", "type", "created_at").
+		Columns(
+			"portfolio_id",
+			"pair",
+			"asset_amount",
+			"asset_price",
+			"amount_usd",
+			"transaction_date",
+			"type",
+			"created_at",
+			"note",
+		).
 		Values(
 			defID,
 			tx.Pair,
@@ -136,4 +146,69 @@ func (s *Store) GetLast5TransactionsForUser(ctx context.Context, dbUserID int64)
 	}
 
 	return transactions, nil
+}
+
+// GetPortfolioSummariesForUser retrieves portfolio summaries with asset totals for a user
+func (s *Store) GetPortfolioSummariesForUser(ctx context.Context, dbUserID int64) ([]t.PortfolioSummary, error) {
+	query, args, err := s.sqlBuilder.
+		Select(
+			"p.name as portfolio_name",
+			"t.pair",
+			"SUM(CASE WHEN t.type = 'BUY' THEN t.asset_amount ELSE -t.asset_amount END) as total_amount",
+			"SUM(CASE WHEN t.type = 'BUY' THEN t.amount_usd ELSE -t.amount_usd END) as total_usd",
+		).
+		From("transactions t").
+		InnerJoin("portfolios p ON p.id = t.portfolio_id").
+		Where(sq.Eq{
+			"p.user_id": dbUserID,
+		}).
+		GroupBy("p.name", "t.pair").
+		Having("SUM(CASE WHEN t.type = 'BUY' THEN t.asset_amount ELSE -t.asset_amount END) > 0").
+		OrderBy("p.name", "t.pair").
+		ToSql()
+
+	if err != nil {
+		return nil, fmt.Errorf("build portfolio summaries query: %w", err)
+	}
+
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec portfolio summaries query: %w", err)
+	}
+	defer rows.Close()
+
+	// Use a map to group assets by portfolio
+	portfolioMap := make(map[string][]t.PortfolioAsset)
+
+	for rows.Next() {
+		var portfolioName, pair string
+		var totalAmount, totalUSD float64
+
+		if err := rows.Scan(&portfolioName, &pair, &totalAmount, &totalUSD); err != nil {
+			return nil, fmt.Errorf("scan portfolio summary: %w", err)
+		}
+
+		asset := t.PortfolioAsset{
+			Pair:        pair,
+			TotalAmount: totalAmount,
+			TotalUSD:    totalUSD,
+		}
+
+		portfolioMap[portfolioName] = append(portfolioMap[portfolioName], asset)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	// Convert map to slice
+	var summaries []t.PortfolioSummary
+	for name, assets := range portfolioMap {
+		summaries = append(summaries, t.PortfolioSummary{
+			Name:   name,
+			Assets: assets,
+		})
+	}
+
+	return summaries, nil
 }

@@ -21,6 +21,8 @@ func (s *Service) checkBeforeCreatePortfolio(
 		return nil
 	}
 
+	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, r.BotMessageID))
+
 	limitReached, err := s.store.ReachedPortfolioLimit(ctx, dbUserID)
 	if err != nil {
 		log.Errorf("could not check portfolios amount: %s", err)
@@ -35,10 +37,15 @@ func (s *Service) checkBeforeCreatePortfolio(
 	log.Infof("user_id: %d, portfolios limit reached: %t", dbUserID, limitReached)
 
 	if limitReached {
-		err := s.editMessageText(
-			chatID,
-			r.BotMessageID,
-			"Sorry, you can create up to 2 portfolios. Gimmi ur munney to create more portfolios oi.")
+		err := s.sendTemporaryMessage(
+			tgbotapi.NewMessage(chatID, "Sorry, you can create up to 2 portfolios. Gimmi ur munney to create more portfolios oi."),
+			tgUserID,
+			20*time.Second,
+		)
+		// err := s.editMessageText(
+		// 	chatID,
+		// 	r.BotMessageID,
+		// 	"Sorry, you can create up to 2 portfolios. Gimmi ur munney to create more portfolios oi.")
 		if err != nil {
 			return err
 		}
@@ -47,10 +54,19 @@ func (s *Service) checkBeforeCreatePortfolio(
 
 	s.sessions.setState(tgUserID, "waiting_portfolio_name")
 
-	return s.editMessageText(
-		chatID,
-		r.BotMessageID,
-		"Please enter a name for your portfolio without special characters:")
+	// err := s.editMessageText(asdasdasd
+	// 	chatID,
+	// 	r.BotMessageID,
+	// 	"Please enter a name for your portfolio without special characters:")
+
+	msg := tgbotapi.NewMessage(chatID, "Please enter a name for your portfolio without special characters:")
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
+		),
+	)
+
+	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 }
 
 func (s *Service) ShowPortfolios(
@@ -75,10 +91,13 @@ func (s *Service) ShowPortfolios(
 	}
 
 	if len(ps) == 0 {
-		msg := tgbotapi.NewMessage(chatID, "You have no portfolios, let's create one!")
+		msg := tgbotapi.NewMessage(chatID, "You have no another portfolio, let's create a new one!")
 		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonData("New portfolio", "create_portfolio"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
 			),
 		)
 		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
@@ -93,9 +112,14 @@ func (s *Service) ShowPortfolios(
 		))
 	}
 
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
+	))
+
 	msg := tgbotapi.NewMessage(chatID, "Select a portfolio to perform an action:")
 	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+
 	// TODO: add Back button
 
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
@@ -233,6 +257,7 @@ func (s *Service) gfPortfoliosMain(chatID, tgUserID int64, BotMsgID int) error {
 
 	actions := []t.Actiontype{
 		{TgText: "New portfolio", CallBackName: "create_portfolio"}, // already exists
+		{TgText: "General Report", CallBackName: "gf_portfolio_general_report"},
 		{TgText: "Delete portfolio", CallBackName: "gf_portfolios_delete"},
 		{TgText: "Get default", CallBackName: "gf_portfolio_get_default"},
 		{TgText: "Change default", CallBackName: "gf_portfolio_change_default"},
@@ -241,11 +266,6 @@ func (s *Service) gfPortfoliosMain(chatID, tgUserID int64, BotMsgID int) error {
 	}
 
 	var rows [][]tgbotapi.InlineKeyboardButton
-	// for _, a := range actions {
-	// 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-	// 		tgbotapi.NewInlineKeyboardButtonData(a.TgText, a.CallBackName),
-	// 	))
-	// }
 
 	for i := 0; i < len(actions); i += 2 {
 		row := []tgbotapi.InlineKeyboardButton{
@@ -351,7 +371,18 @@ func (s *Service) showDefaultPortfolio(
 ) error {
 	pName, err := s.store.GetDefaultPortfolio(ctx, dbUserID)
 	if err != nil {
-		return err
+		// return err
+		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
+		msg := tgbotapi.NewMessage(chatID, "You have no default portfolio yet. Let's add your first one!")
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("New portfolio", "create_portfolio"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("Back to main menu", "cancel_action"),
+			),
+		)
+		return s.sendTemporaryMessage(msg, tgUserID, 30*time.Second)
 	}
 
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
@@ -378,6 +409,8 @@ func (s *Service) waitPortfolionName(
 	BotMsgID int,
 	msgText string,
 ) error {
+	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
+
 	pName := s.prettyPortfolioName(msgText)
 
 	nameTaken, err := s.store.PortfolioNameExists(ctx, dbUserID, pName)
@@ -398,8 +431,15 @@ func (s *Service) waitPortfolionName(
 	s.sessions.setTempField(tgUserID, "TempPortfolioName", pName)
 	s.sessions.setState(tgUserID, "waiting_portfolio_description")
 
-	t := fmt.Sprintf("Please enter description for portfolio: %s", pName)
-	return s.editMessageText(chatID, BotMsgID, t)
+	// t := fmt.Sprintf("Please enter description for portfolio: %s", pName)asdasdasd
+	// return s.editMessageText(chatID, BotMsgID, t)
+	msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("Please enter description for portfolio: %s", pName))
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
+		),
+	)
+	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 }
 
 func (s *Service) waitPortfolionDescription(
@@ -421,7 +461,7 @@ func (s *Service) waitPortfolionDescription(
 	err = s.sendTemporaryMessage(
 		tgbotapi.NewMessage(
 			chatID,
-			"Portfolio created successfully!"),
+			fmt.Sprintf("Portfolio %s created successfully!", portfolioName)),
 		tgUserID,
 		20*time.Second)
 	if err != nil {
@@ -460,4 +500,84 @@ func (s *Service) waitNewPortfolionName(
 		"rename_portfolio",
 		SelectedPortfolioName,
 		pName)
+}
+
+// showPortfolioGeneralReport displays a summary of all portfolios with their assets
+func (s *Service) showPortfolioGeneralReport(
+	ctx context.Context,
+	chatID, tgUserID, dbUserID int64,
+	BotMsgID int,
+) error {
+	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
+
+	summaries, err := s.store.GetPortfolioSummariesForUser(ctx, dbUserID)
+	if err != nil {
+		log.Error("Failed to get portfolio summaries", "error", err, "user_id", dbUserID)
+		return s.sendTemporaryMessage(
+			tgbotapi.NewMessage(chatID, "Sorry, couldn't retrieve your portfolio data. Please try again."),
+			tgUserID, 20*time.Second)
+	}
+
+	if len(summaries) == 0 {
+		msg := tgbotapi.NewMessage(chatID, "You don't have any portfolios with assets yet. Start by creating a portfolio and adding some transactions!")
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("New portfolio", "create_portfolio"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
+			),
+		)
+		return s.sendTemporaryMessage(msg, tgUserID, 30*time.Second)
+	}
+
+	// Build the report message
+	var reportText strings.Builder
+	reportText.WriteString("*📊 PORTFOLIO GENERAL REPORT*\n\n")
+
+	var grandTotalUSD float64
+	for i, summary := range summaries {
+		if i > 0 {
+			reportText.WriteString("\n")
+		}
+
+		reportText.WriteString(fmt.Sprintf("*Portfolio: %s*\n", summary.Name))
+
+		var portfolioTotalUSD float64
+		for _, asset := range summary.Assets {
+			// Extract base asset from pair (e.g., BTC from BTCUSDT)
+			baseCurrency := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(asset.Pair, "USDT"), "USDC"), "USD"), "EUR")
+
+			reportText.WriteString(fmt.Sprintf("%s: %.6g %s, %.2f USD\n",
+				asset.Pair,
+				asset.TotalAmount,
+				baseCurrency,
+				asset.TotalUSD))
+
+			portfolioTotalUSD += asset.TotalUSD
+		}
+
+		reportText.WriteString(fmt.Sprintf("*Portfolio Total: %.2f USD*\n", portfolioTotalUSD))
+		grandTotalUSD += portfolioTotalUSD
+
+		if i < len(summaries)-1 {
+			reportText.WriteString("─────────────────────\n")
+		}
+	}
+
+	reportText.WriteString(fmt.Sprintf("\n*🎯 GRAND TOTAL: %.2f USD*", grandTotalUSD))
+
+	msg := tgbotapi.NewMessage(chatID, reportText.String())
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🔄 Refresh", "gf_portfolio_general_report"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Back to Portfolios", "portfolios"),
+			tgbotapi.NewInlineKeyboardButtonData("Main Menu", "cancel_action"),
+		),
+	)
+
+	return s.sendTemporaryMessage(msg, tgUserID, 60*time.Second)
 }
