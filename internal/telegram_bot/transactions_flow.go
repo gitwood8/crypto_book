@@ -73,7 +73,7 @@ func (s *Service) askTransactionType(
 			tgbotapi.NewInlineKeyboardButtonData("Sell", "tx_type_sell"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+			tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
 		),
 	)
 
@@ -124,7 +124,7 @@ func (s *Service) askTransactionPair(
 	}
 
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
+		tgbotapi.NewInlineKeyboardButtonData("Back", "gf_add_transaction"),
 	))
 
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
@@ -146,12 +146,9 @@ func (s *Service) askTransactionAssetAmount(
 
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	result, err := s.transactionValidateInput(selectedPair, "pair")
-	if err != nil {
-		errorText := result.(string)
-		msg := tgbotapi.NewMessage(chatID, errorText)
-		msg.ParseMode = "Markdown"
-		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
+	result, shouldReturn, err := s.handleTransactionValidationError(selectedPair, "pair", chatID, tgUserID)
+	if shouldReturn {
+		return err
 	}
 
 	txData.Pair = result.(string)
@@ -161,7 +158,7 @@ func (s *Service) askTransactionAssetAmount(
 	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+			tgbotapi.NewInlineKeyboardButtonData("Back", "gf_add_transaction"),
 		),
 	)
 
@@ -178,15 +175,10 @@ func (s *Service) askTransactionAssetPrice(
 	fmt.Println("amount", msgText)
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	result, err := s.transactionValidateInput(msgText, "amount")
-	if err != nil {
-		errorText := result.(string)
-		msg := tgbotapi.NewMessage(chatID, errorText)
-		msg.ParseMode = "Markdown"
-		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
+	result, shouldReturn, err := s.handleTransactionValidationError(msgText, "amount", chatID, tgUserID)
+	if shouldReturn {
+		return err
 	}
-
-	fmt.Printf("amountFloat: %s\n", reflect.TypeOf(result))
 
 	txData.AssetAmount = result.(float64)
 
@@ -195,7 +187,7 @@ func (s *Service) askTransactionAssetPrice(
 	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+			tgbotapi.NewInlineKeyboardButtonData("Back", "gf_add_transaction"),
 		),
 	)
 
@@ -213,12 +205,9 @@ func (s *Service) askTransactionDate(
 
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	result, err := s.transactionValidateInput(msgText, "price")
-	if err != nil {
-		errorText := result.(string)
-		msg := tgbotapi.NewMessage(chatID, errorText)
-		msg.ParseMode = "Markdown"
-		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
+	result, shouldReturn, err := s.handleTransactionValidationError(msgText, "price", chatID, tgUserID)
+	if shouldReturn {
+		return err
 	}
 
 	fmt.Printf("priceFloat: %s\n", reflect.TypeOf(result))
@@ -242,7 +231,7 @@ func (s *Service) askTransactionDate(
 			tgbotapi.NewInlineKeyboardButtonData("1 month ago", "tx_date_1month"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+			tgbotapi.NewInlineKeyboardButtonData("Back", "gf_add_transaction"),
 		),
 	)
 
@@ -260,12 +249,9 @@ func (s *Service) transactionConfirmation(
 
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	result, err := s.transactionValidateInput(msgText, "date")
-	if err != nil {
-		errorText := result.(string)
-		msg := tgbotapi.NewMessage(chatID, errorText)
-		msg.ParseMode = "Markdown"
-		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
+	result, shouldReturn, err := s.handleTransactionValidationError(msgText, "date", chatID, tgUserID)
+	if shouldReturn {
+		return err
 	}
 
 	fmt.Printf("dateTime: %s\n", reflect.TypeOf(result))
@@ -326,7 +312,7 @@ func (s *Service) transactionConfirmation(
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("Confirm", "tx_confirm_transaction"),
-			tgbotapi.NewInlineKeyboardButtonData("Cancel", "cancel_action"),
+			tgbotapi.NewInlineKeyboardButtonData("Back", "gf_add_transaction"),
 		),
 	)
 	msg.ParseMode = "Markdown"
@@ -378,8 +364,9 @@ func (s *Service) transactionValidateInput(rawText string, inputType string) (an
 		// Crypto pair validation: 3-8 chars for base + 3-8 chars for quote
 		validRe := regexp.MustCompile(`^[A-Z]{3,8}[A-Z]{3,8}$`)
 		if !validRe.MatchString(cleaned) {
+			log.Warnf("invalid pair format: %s", cleaned)
 			return "Wrong pair format. Use format like 'BTCUSDT', 'ETHUSDT', or 'btc usdt'. Only letters allowed, 6-16 characters total.",
-				fmt.Errorf("invalid pair format")
+				fmt.Errorf("invalid pair format") // FIXME no error in logs, so why?
 		}
 
 		//FIXME add sending message to tg
@@ -488,6 +475,29 @@ func (s *Service) transactionValidateInput(rawText string, inputType string) (an
 	}
 }
 
+// handleTransactionValidationError is a helper method to handle validation errors consistently
+// It validates input and sends error message if validation fails
+// Returns (validatedResult, shouldReturn, error) where shouldReturn indicates if caller should return early
+func (s *Service) handleTransactionValidationError(
+	msgText, inputType string,
+	chatID, tgUserID int64,
+) (any, bool, error) {
+	result, err := s.transactionValidateInput(msgText, inputType)
+	if err != nil {
+		errorText := result.(string)
+		msg := tgbotapi.NewMessage(chatID, errorText)
+		msg.ParseMode = "Markdown"
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("Try again", "gf_add_transaction"),
+			),
+		)
+		sendErr := s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
+		return nil, true, sendErr
+	}
+	return result, false, nil
+}
+
 func (s *Service) mergeUniqueTxPairs(defaultPairs, topPairs []string) []string {
 	unique := make(map[string]struct{})
 	var result []string
@@ -594,7 +604,6 @@ func (s *Service) showLast5Transactions(
 }
 
 // Helper function to extract base currency from pair ("BTCUSDT" -> "BTC")
-// FIXME useless
 func (s *Service) extractBaseCurrency(pair string) string {
 	commonQuotes := []string{"USDT", "USDC", "USD", "EUR", "BTC", "ETH", "BNB"}
 

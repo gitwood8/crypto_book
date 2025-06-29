@@ -461,7 +461,7 @@ func (s *Service) waitPortfolionDescription(
 	err = s.sendTemporaryMessage(
 		tgbotapi.NewMessage(
 			chatID,
-			fmt.Sprintf("Portfolio %s created successfully!", portfolioName)),
+			fmt.Sprintf("Portfolio '%s' created successfully!", portfolioName)),
 		tgUserID,
 		20*time.Second)
 	if err != nil {
