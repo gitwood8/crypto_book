@@ -17,7 +17,7 @@ type Config struct {
 }
 
 func Load() *Config {
-	_ = godotenv.Load(".env") // load .env, if exists
+	_ = godotenv.Load(".env") // load local .env, if exists
 
 	cfg := &Config{
 		TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),

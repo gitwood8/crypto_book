@@ -178,6 +178,10 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message, sv *
 			log.Infof("main menu: %s", text)
 			return s.gfTransactionsMain(msg.Chat.ID, tgUserID, sv.BotMessageID)
 
+		case "Reports":
+			log.Infof("main menu: %s", text)
+			return s.gfReportsMain(msg.Chat.ID, tgUserID, sv.BotMessageID)
+
 		case "Help":
 			log.Infof("main menu: %s", text)
 			return s.showServiceInfo(msg.Chat.ID, tgUserID)
