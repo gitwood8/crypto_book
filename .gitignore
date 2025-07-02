@@ -6,3 +6,4 @@ IMPORTANT_NOTES
 /pg_data
 /bin
 /.build
+PANIC_HANDLING_GUIDE.md

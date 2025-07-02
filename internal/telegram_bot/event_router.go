@@ -3,6 +3,7 @@ package telegram_bot
 import (
 	"context"
 	"strings"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
@@ -11,7 +12,13 @@ import (
 
 func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery, sv *UserSession, tgUserID int64) error {
 	// tgUserID := cb.From.ID
-	// FIXME: check this log
+
+	// handle nil session case (after service restart)
+	if sv == nil {
+		log.Warnf("nil session for user %d, callback: %s", tgUserID, cb.Data)
+		// this should be handled by handleStaleCallback, but add safety check
+		return s.handleStaleCallback(cb)
+	}
 
 	dbUserID, err := s.store.GetUserIDByTelegramID(ctx, tgUserID)
 	if err != nil {
@@ -114,6 +121,18 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message, sv *UserSession, tgUserID int64) error {
 	// tgUserID := msg.From.ID
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
+
+	// handle nil session case (after service restart)
+	if sv == nil {
+		log.Warnf("nil session for user %d message: %s", tgUserID, msg.Text)
+		// send msg to user to start over
+		//FIXME send main menu
+		return s.sendTemporaryMessage(
+			tgbotapi.NewMessage(msg.Chat.ID,
+				"Session lost after restart. Please use /start to begin again."),
+			tgUserID, 20*time.Second)
+	}
+
 	state, ok := s.sessions.getState(tgUserID)
 	if !ok {
 		return nil

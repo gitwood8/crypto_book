@@ -157,18 +157,15 @@ func (s *Store) GetDefaultPortfolio(ctx context.Context, dbUserID int64) (string
 		return "", fmt.Errorf("build GetDefaultPortfolio query: %w", err)
 	}
 
-	fmt.Println("ASDASDASDASDASD")
-
 	var dpName string
 	err = s.DB.QueryRowContext(ctx, query, args...).Scan(&dpName)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "ХУЙ", err
+			return "", err
 		}
 		return "", fmt.Errorf("exec GetDefaultPortfolio query: %w", err)
 	}
 
-	fmt.Println("pLplPlpplplplp")
 	return dpName, nil
 }
 

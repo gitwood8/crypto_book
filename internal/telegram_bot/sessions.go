@@ -112,9 +112,33 @@ func (sm *SessionManager) cleanOldSessions(timeout time.Duration) {
 	defer sm.mu.Unlock()
 
 	now := time.Now()
+	deletedCount := 0
+
 	for tgUserID, session := range sm.sessions {
 		if now.Sub(session.UpdatedAt) > timeout {
 			delete(sm.sessions, tgUserID)
+			deletedCount++
 		}
 	}
+
+	if deletedCount > 0 {
+		log.Infof("cleaned %d old sessions, %d active sessions remaining", deletedCount, len(sm.sessions))
+	}
+}
+
+// clear all user sessions - useful on service restart
+func (sm *SessionManager) clearAllSessions() {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	log.Infof("clearing all sessions (%d total)", len(sm.sessions))
+	sm.sessions = make(map[int64]*UserSession)
+}
+
+// return the number of active sessions
+func (sm *SessionManager) getSessionCount() int {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	return len(sm.sessions)
 }
