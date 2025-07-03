@@ -77,6 +77,47 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) error {
+	// Add panic recovery to prevent service crashes
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("panic recovered in handleUpdate", "panic", r, "stack", fmt.Sprintf("%+v", r))
+
+			// Try to send recovery message if we can identify the user
+			var chatID int64
+			var userID int64
+
+			if update.CallbackQuery != nil {
+				chatID = update.CallbackQuery.Message.Chat.ID
+				userID = update.CallbackQuery.From.ID
+			} else if update.Message != nil {
+				chatID = update.Message.Chat.ID
+				userID = update.Message.From.ID
+			}
+
+			if chatID != 0 && userID != 0 {
+				// Clear any existing session for this user
+				s.sessions.clearSession(userID)
+
+				// Delete the problematic message if it's a callback
+				if update.CallbackQuery != nil && update.CallbackQuery.Message != nil {
+					_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, update.CallbackQuery.Message.MessageID))
+				}
+
+				// Send recovery message
+				recoveryMsg := tgbotapi.NewMessage(chatID,
+					"🔧 *Service Recovery*\n\n"+
+						"The service was recently restarted. Your previous session has been cleared.\n\n"+
+						"Please start fresh by using /start or the main menu.")
+				recoveryMsg.ParseMode = "Markdown"
+				recoveryMsg.ReplyMarkup = s.showMainMenu(chatID, userID)
+
+				if _, err := s.bot.Send(recoveryMsg); err != nil {
+					log.Error("failed to send recovery message", "error", err)
+				}
+			}
+		}
+	}()
+
 	var tgUserID int64
 
 	if update.CallbackQuery != nil {
@@ -87,9 +128,28 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 		return nil
 	}
 
-	// log.Info(tgUserID)
+	// Get or create session - this ensures session exists
+	userSession, sessionExists := s.sessions.getSessionVars(tgUserID)
 
-	userSession, _ := s.sessions.getSessionVars(tgUserID)
+	// If this is a callback query but no session exists, it means the service was restarted
+	// and the user is clicking on an old button
+	if update.CallbackQuery != nil && !sessionExists {
+		chatID := update.CallbackQuery.Message.Chat.ID
+		messageID := update.CallbackQuery.Message.MessageID
+
+		// Delete the old message
+		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, messageID))
+
+		// Send session expired message
+		expiredMsg := tgbotapi.NewMessage(chatID,
+			"⚠️ *Session Expired*\n\n"+
+				"This button is from before the service restart. Please use the main menu below.")
+		expiredMsg.ParseMode = "Markdown"
+		expiredMsg.ReplyMarkup = s.showMainMenu(chatID, tgUserID)
+
+		_, err := s.bot.Send(expiredMsg)
+		return err
+	}
 
 	switch {
 	case update.Message != nil && update.Message.Text == "/start":
