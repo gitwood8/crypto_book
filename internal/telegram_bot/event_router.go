@@ -52,10 +52,10 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	case cb.Data == "gf_reports_main":
 		return s.gfReportsMain(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
 
-	// case cb.Data == "gf_portfolio_general_report":
-	// 	return s.showPortfolioGeneralReport(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
+	case cb.Data == "gf_reports_general":
+		return s.showPortfolioGeneralReport(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
 
-	// case cb.Data == "gf_portfolio_advanced_report":
+	// case cb.Data == "gf_reports_advanced":
 	// 	return s.showPortfolioAdvancedReport(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
 
 	// ----------- REPORTS -----------

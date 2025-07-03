@@ -54,6 +54,8 @@ func (s *Service) showWelcome(chatID, tgUserID int64) error {
 func (s *Service) showMainMenu(chatID, tgUserID int64) error {
 	s.sessions.setState(tgUserID, "main_menu")
 
+	// _, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
+
 	mainMenu := tgbotapi.NewMessage(chatID, "What would you like to do next?")
 	mainMenu.ReplyMarkup = tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(

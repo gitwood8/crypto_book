@@ -51,3 +51,18 @@ type PortfolioSummary struct {
 	Name   string
 	Assets []PortfolioAsset
 }
+
+func (e *PriceDataError) Error() string {
+	return e.Message
+}
+
+// Additional types for price data fetching
+type PriceDataError struct {
+	InvalidPairs []string // Pairs that couldn't be fetched
+	Message      string   // Error message
+}
+
+type BinanceErrorResponse struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+}

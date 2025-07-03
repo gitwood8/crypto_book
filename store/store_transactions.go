@@ -216,3 +216,57 @@ func (s *Store) GetPortfolioSummariesForUser(ctx context.Context, dbUserID int64
 
 	return summaries, nil
 }
+
+// GetReportData retrieves aggregated transaction data across all portfolios for PnL calculations
+func (s *Store) GetReportData(ctx context.Context, dbUserID int64) ([]t.CurrencyPnLData, error) {
+	query, args, err := s.sqlBuilder.
+		Select(
+			"t.pair",
+			"SUM(CASE WHEN t.type = 'buy' THEN t.asset_amount ELSE -t.asset_amount END) as total_asset_amount",
+			"SUM(CASE WHEN t.type = 'buy' THEN t.amount_usd ELSE 0 END) as total_invested_usd",
+		).
+		From("transactions t").
+		InnerJoin("portfolios p ON p.id = t.portfolio_id").
+		Where(sq.Eq{
+			"p.user_id": dbUserID,
+		}).
+		GroupBy("t.pair").
+		Having("SUM(CASE WHEN t.type = 'buy' THEN t.asset_amount ELSE -t.asset_amount END) > 0").
+		OrderBy("t.pair").
+		ToSql()
+
+	if err != nil {
+		return nil, fmt.Errorf("build report data query: %w", err)
+	}
+
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec report data query: %w", err)
+	}
+	defer rows.Close()
+
+	var reportData []t.CurrencyPnLData
+	for rows.Next() {
+		var data t.CurrencyPnLData
+		if err := rows.Scan(
+			&data.Pair,
+			&data.TotalAssetAmount,
+			&data.TotalInvestedUSD,
+		); err != nil {
+			return nil, fmt.Errorf("scan report data: %w", err)
+		}
+
+		// Calculate average purchase price
+		if data.TotalAssetAmount > 0 {
+			data.AveragePurchasePrice = data.TotalInvestedUSD / data.TotalAssetAmount
+		}
+
+		reportData = append(reportData, data)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return reportData, nil
+}
