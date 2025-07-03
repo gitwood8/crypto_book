@@ -55,8 +55,8 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	case cb.Data == "gf_reports_general":
 		return s.showPortfolioGeneralReport(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
 
-	// case cb.Data == "gf_reports_advanced":
-	// 	return s.showPortfolioAdvancedReport(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
+	case cb.Data == "gf_reports_advanced":
+		return s.showPortfolioAdvancedReport(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
 
 	// ----------- REPORTS -----------
 
@@ -139,8 +139,8 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message, sv *
 		return s.askTransactionDate(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
 
 		// TODO investigee do i need this if i have callback
-	// case "waiting_transaction_date":
-	// 	return s.asktransactionConfirmation(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
+	case "waiting_transaction_date":
+		return s.asktransactionConfirmation(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
 
 	case "main_menu":
 		text := msg.Text

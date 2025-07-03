@@ -2,9 +2,11 @@ package telegram_bot
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"strings"
+	"strconv"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -41,108 +43,98 @@ type PnLCalculator struct {
 	httpClient    *http.Client
 }
 
-// FetchCurrentPrices fetches current prices for cryptocurrency pairs from Binance API
+// FetchCurrentPrices fetches current prices for specific cryptocurrency pairs from Binance API
+// Makes a single request with the pairs array to get only the prices we need
 func (calc *PnLCalculator) FetchCurrentPrices(ctx context.Context, pairs []string) (map[string]float64, error) {
 	if len(pairs) == 0 {
 		return make(map[string]float64), nil
 	}
 
-	priceMap := make(map[string]float64)
+	log.Info("Fetching current prices from Binance API", "pairs_count", len(pairs), "pairs", pairs)
 
-	// For now, return mock data to make it work
-	// In production, this would call the actual Binance API
-	for _, pair := range pairs {
-		switch pair {
-		case "BTCUSDT":
-			priceMap[pair] = 45000.0
-		case "ETHUSDT":
-			priceMap[pair] = 3000.0
-		case "ADAUSDT":
-			priceMap[pair] = 0.5
-		default:
-			priceMap[pair] = 100.0 // Default mock price
-		}
-	}
-
-	log.Info("Fetched mock prices", "pairs", len(pairs), "prices", len(priceMap))
-	return priceMap, nil
-}
-
-// showPortfolioGeneralReport displays the historical cost basis report (like screenshot 2)
-func (s *Service) showPortfolioGeneralReport(ctx context.Context, chatID, tgUserID, dbUserID int64, BotMsgID int) error {
-	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
-
-	// Get portfolio summaries for historical cost basis
-	summaries, err := s.store.GetPortfolioSummariesForUser(ctx, dbUserID)
+	// Prepare the symbols array parameter for Binance API
+	// Format: ["BTCUSDT","ETHUSDT","BNBUSDT"]
+	symbolsJSON, err := json.Marshal(pairs)
 	if err != nil {
-		log.Error("Failed to get portfolio summaries", "error", err, "user_id", dbUserID)
-		return s.sendTemporaryMessage(
-			tgbotapi.NewMessage(chatID, "Sorry, couldn't retrieve your portfolio data. Please try again."),
-			tgUserID, 20*time.Second)
+		return nil, fmt.Errorf("marshal pairs to JSON: %w", err)
 	}
 
-	if len(summaries) == 0 {
-		msg := tgbotapi.NewMessage(chatID, "You don't have any portfolios with assets yet. Start by creating a portfolio and adding some transactions!")
-		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("New portfolio", "create_portfolio"),
-			),
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
-			),
-		)
-		return s.sendTemporaryMessage(msg, tgUserID, 30*time.Second)
+	// Build API URL with symbols parameter
+	apiURL := "https://api.binance.com/api/v3/ticker/price?symbols=" + string(symbolsJSON)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create HTTP request: %w", err)
 	}
 
-	// Build the basic report message (like screenshot 2)
-	var reportText strings.Builder
-	reportText.WriteString("📊 *GENERAL PORTFOLIO REPORT*\n")
-	reportText.WriteString("_(Historical cost basis only)_\n\n")
+	// Add headers to identify the request
+	req.Header.Set("User-Agent", "wood_post_bot/1.0")
 
-	var grandTotalUSD float64
-	for i, summary := range summaries {
-		if i > 0 {
-			reportText.WriteString("\n")
+	log.Info("Making request to Binance API", "url", apiURL)
+
+	resp, err := calc.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		// Try to parse as Binance error response
+		var binanceErr t.BinanceErrorResponse
+		if err := json.Unmarshal(body, &binanceErr); err == nil {
+			return nil, fmt.Errorf("Binance API error (code %d): %s", binanceErr.Code, binanceErr.Msg)
 		}
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
 
-		reportText.WriteString(fmt.Sprintf("*Portfolio: %s*\n", summary.Name))
+	// Parse the response - should be an array of price data for our specific pairs
+	var priceResponses []t.BinancePriceResponse
+	if err := json.Unmarshal(body, &priceResponses); err != nil {
+		return nil, fmt.Errorf("unmarshal price response: %w", err)
+	}
 
-		var portfolioTotalUSD float64
-		for _, asset := range summary.Assets {
-			// Extract base asset from pair
-			baseCurrency := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(asset.Pair, "USDT"), "USDC"), "USD"), "EUR")
+	log.Info("Received price data from Binance", "received_symbols", len(priceResponses))
 
-			reportText.WriteString(fmt.Sprintf("%s: %.6g %s, invested: %.2f USD\n",
-				asset.Pair,
-				asset.TotalAmount,
-				baseCurrency,
-				asset.TotalUSD))
-
-			portfolioTotalUSD += asset.TotalUSD
+	// Create a map of prices
+	priceMap := make(map[string]float64)
+	for _, priceResp := range priceResponses {
+		price, err := strconv.ParseFloat(priceResp.Price, 64)
+		if err != nil {
+			log.Warn("Failed to parse price", "symbol", priceResp.Symbol, "price", priceResp.Price, "error", err)
+			continue
 		}
+		priceMap[priceResp.Symbol] = price
+		log.Info("Parsed price for pair", "pair", priceResp.Symbol, "price", price)
+	}
 
-		reportText.WriteString(fmt.Sprintf("*Portfolio Total: %.2f USD*\n", portfolioTotalUSD))
-		grandTotalUSD += portfolioTotalUSD
-
-		if i < len(summaries)-1 {
-			reportText.WriteString("─────────────────────\n")
+	// Check which pairs were missing from the response
+	var missingPairs []string
+	for _, pair := range pairs {
+		if _, exists := priceMap[pair]; !exists {
+			missingPairs = append(missingPairs, pair)
+			log.Warn("Price not found for pair", "pair", pair)
 		}
 	}
 
-	reportText.WriteString(fmt.Sprintf("\n🎯 *GRAND TOTAL: %.2f USD*\n", grandTotalUSD))
-	reportText.WriteString("\n💡 _This shows historical cost basis. For current PnL analysis, use the Advanced Report._")
+	// Log results
+	log.Info("Price fetching completed",
+		"requested_pairs", len(pairs),
+		"found_pairs", len(priceMap),
+		"missing_pairs", len(missingPairs))
 
-	msg := tgbotapi.NewMessage(chatID, reportText.String())
-	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📈 Advanced PnL Report", "gf_reports_advanced"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Back to Reports", "gf_reports_main"),
-			tgbotapi.NewInlineKeyboardButtonData("Main Menu", "cancel_action"),
-		),
-	)
+	if len(missingPairs) > 0 {
+		log.Warn("Some pairs were not found on Binance", "missing_pairs", missingPairs)
+	}
 
-	return s.sendTemporaryMessage(msg, tgUserID, 60*time.Second)
+	// Return error if no prices were found at all
+	if len(priceMap) == 0 {
+		return nil, fmt.Errorf("no valid prices found for any of the requested pairs: %v", pairs)
+	}
+
+	return priceMap, nil
 }
