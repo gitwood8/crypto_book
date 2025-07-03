@@ -59,9 +59,10 @@ func (s *Service) showMainMenu(chatID, tgUserID int64) error {
 		tgbotapi.NewKeyboardButtonRow(
 			tgbotapi.NewKeyboardButton("My portfolios"),
 			tgbotapi.NewKeyboardButton("Transactions"),
+			tgbotapi.NewKeyboardButton("Reports"),
 		),
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("Help"), // not valid yet
+			tgbotapi.NewKeyboardButton("Help"),
 		),
 	)
 

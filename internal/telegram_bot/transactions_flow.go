@@ -73,7 +73,7 @@ func (s *Service) askTransactionType(
 			tgbotapi.NewInlineKeyboardButtonData("Sell", "tx_type_sell"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Back", "cancel_action"),
+			tgbotapi.NewInlineKeyboardButtonData("Main menu", "cancel_action"),
 		),
 	)
 
@@ -139,15 +139,15 @@ func (s *Service) askTransactionAssetAmount(
 	msgText string,
 	txData *t.TempTransactionData,
 ) error {
-	fmt.Println("raw", msgText)
+	// fmt.Println("raw", msgText)
 	selectedPair := strings.TrimPrefix(msgText, "tx_pair_chosen_")
 
-	fmt.Println("after trim", selectedPair)
+	// fmt.Println("after trim", selectedPair)
 
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	result, shouldReturn, err := s.handleTransactionValidationError(selectedPair, "pair", chatID, tgUserID)
-	if shouldReturn {
+	result, err := s.handleTransactionValidationError(selectedPair, "pair", chatID, tgUserID)
+	if err != nil {
 		return err
 	}
 
@@ -175,8 +175,8 @@ func (s *Service) askTransactionAssetPrice(
 	fmt.Println("amount", msgText)
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	result, shouldReturn, err := s.handleTransactionValidationError(msgText, "amount", chatID, tgUserID)
-	if shouldReturn {
+	result, err := s.handleTransactionValidationError(msgText, "amount", chatID, tgUserID)
+	if err != nil {
 		return err
 	}
 
@@ -205,8 +205,8 @@ func (s *Service) askTransactionDate(
 
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	result, shouldReturn, err := s.handleTransactionValidationError(msgText, "price", chatID, tgUserID)
-	if shouldReturn {
+	result, err := s.handleTransactionValidationError(msgText, "price", chatID, tgUserID)
+	if err != nil {
 		return err
 	}
 
@@ -218,7 +218,6 @@ func (s *Service) askTransactionDate(
 		"Select transaction date or enter manually in format *YYYY-MM-DD* (e.g. 2025-06-15):")
 	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		//FIXME remove unnecessary frames
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("Today", "tx_date_today"),
 			tgbotapi.NewInlineKeyboardButtonData("Yesterday", "tx_date_yesterday"),
@@ -239,18 +238,21 @@ func (s *Service) askTransactionDate(
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 }
 
-func (s *Service) transactionConfirmation(
+func (s *Service) asktransactionConfirmation(
 	chatID, tgUserID int64,
 	BotMsgID int,
-	msgText string,
+	dateString string,
 	txData *t.TempTransactionData,
 ) error {
-	fmt.Println("date", msgText)
 
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	result, shouldReturn, err := s.handleTransactionValidationError(msgText, "date", chatID, tgUserID)
-	if shouldReturn {
+	log.Info("date raw", dateString)
+	dateValue := strings.TrimPrefix(dateString, "tx_date_")
+	log.Info("date", dateValue)
+
+	result, err := s.handleTransactionValidationError(dateValue, "date", chatID, tgUserID)
+	if err != nil {
 		return err
 	}
 
@@ -341,7 +343,7 @@ func (s *Service) transactionConfirmed(
 	err = s.sendTemporaryMessage(
 		tgbotapi.NewMessage(
 			chatID,
-			fmt.Sprintf("Transaction added successfully successfully: %s, %.2f USD!", txData.Pair, txData.USDAmount)),
+			fmt.Sprintf("Transaction added successfully: %s, %.2f USD!", txData.Pair, txData.USDAmount)),
 		tgUserID,
 		10*time.Second)
 	if err != nil {
@@ -368,22 +370,6 @@ func (s *Service) transactionValidateInput(rawText string, inputType string) (an
 			return "Wrong pair format. Use format like 'BTCUSDT', 'ETHUSDT', or 'btc usdt'. Only letters allowed, 6-16 characters total.",
 				fmt.Errorf("invalid pair format") // FIXME no error in logs, so why?
 		}
-
-		//FIXME add sending message to tg
-		// Check if it looks like a real crypto pair (ends with common quote currencies)
-		// commonQuotes := []string{"USDT", "USDC", "BTC", "ETH", "BNB", "USD", "EUR"}
-		// validPair := false
-		// for _, quote := range commonQuotes {
-		// 	if strings.HasSuffix(cleaned, quote) && len(cleaned) > len(quote) {
-		// 		validPair = true
-		// 		break
-		// 	}
-		// }
-
-		// if !validPair {
-		// 	return fmt.Sprintf("Pair should end with common quote currency: %s. Example: BTCUSDT", strings.Join(commonQuotes, ", ")),
-		// 		fmt.Errorf("invalid quote currency")
-		// }
 
 		return cleaned, nil
 
@@ -477,11 +463,11 @@ func (s *Service) transactionValidateInput(rawText string, inputType string) (an
 
 // handleTransactionValidationError is a helper method to handle validation errors consistently
 // It validates input and sends error message if validation fails
-// Returns (validatedResult, shouldReturn, error) where shouldReturn indicates if caller should return early
+// Returns (validatedResult, error) - if error is not nil, caller should return early
 func (s *Service) handleTransactionValidationError(
 	msgText, inputType string,
 	chatID, tgUserID int64,
-) (any, bool, error) {
+) (any, error) {
 	result, err := s.transactionValidateInput(msgText, inputType)
 	if err != nil {
 		errorText := result.(string)
@@ -493,9 +479,13 @@ func (s *Service) handleTransactionValidationError(
 			),
 		)
 		sendErr := s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
-		return nil, true, sendErr
+		if sendErr != nil {
+			return nil, sendErr
+		}
+		// Return the original validation error, not the send error
+		return nil, err
 	}
-	return result, false, nil
+	return result, nil
 }
 
 func (s *Service) mergeUniqueTxPairs(defaultPairs, topPairs []string) []string {

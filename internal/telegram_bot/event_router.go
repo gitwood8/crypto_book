@@ -3,7 +3,6 @@ package telegram_bot
 import (
 	"context"
 	"strings"
-	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
@@ -12,13 +11,7 @@ import (
 
 func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery, sv *UserSession, tgUserID int64) error {
 	// tgUserID := cb.From.ID
-
-	// handle nil session case (after service restart)
-	if sv == nil {
-		log.Warnf("nil session for user %d, callback: %s", tgUserID, cb.Data)
-		// this should be handled by handleStaleCallback, but add safety check
-		return s.handleStaleCallback(cb)
-	}
+	// FIXME: check this log
 
 	dbUserID, err := s.store.GetUserIDByTelegramID(ctx, tgUserID)
 	if err != nil {
@@ -34,8 +27,11 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	case cb.Data == "who_am_i":
 		return s.showServiceInfo(cb.Message.Chat.ID, tgUserID)
 
-	// case cb.Data == "gf_portfolios":
-	// 	return s.gfPortfoliosMain(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
+		// case cb.Data == "gf_portfolios":
+		// 	return s.gfPortfoliosMain(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
+
+	case cb.Data == "gf_portfolios_main":
+		return s.gfPortfoliosMain(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
 
 	case cb.Data == "gf_portfolios_delete":
 		s.sessions.setTempField(tgUserID, "NextAction", "delete")
@@ -52,8 +48,17 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	case cb.Data == "gf_portfolio_get_default":
 		return s.showDefaultPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
 
-	case cb.Data == "gf_portfolio_general_report":
-		return s.showPortfolioGeneralReport(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
+	// ----------- REPORTS -----------
+	case cb.Data == "gf_reports_main":
+		return s.gfReportsMain(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
+
+	// case cb.Data == "gf_portfolio_general_report":
+	// 	return s.showPortfolioGeneralReport(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
+
+	// case cb.Data == "gf_portfolio_advanced_report":
+	// 	return s.showPortfolioAdvancedReport(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
+
+	// ----------- REPORTS -----------
 
 	case strings.Contains(cb.Data, "::"):
 		// log.Infof("callback data: %s", cb.Data)
@@ -68,7 +73,7 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	case cb.Data == "confirm_portfolio_change_default":
 		return s.portfolioChangeDefaultConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, sv.SelectedPortfolioName)
 
-		// ------- TRANSACTIONS -------
+	// ------- TRANSACTIONS -------
 	case cb.Data == "gf_transactions_main":
 		return s.gfTransactionsMain(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
 
@@ -87,27 +92,9 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	case strings.Contains(cb.Data, "tx_pair_chosen_"):
 		return s.askTransactionAssetAmount(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, cb.Data, &sv.TempTransaction)
 
-	// ------- DATE SELECTION -------
-	case cb.Data == "tx_date_today":
-		return s.transactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, "today", &sv.TempTransaction)
+	case strings.Contains(cb.Data, "tx_date_"):
+		return s.asktransactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, cb.Data, &sv.TempTransaction)
 
-	case cb.Data == "tx_date_yesterday":
-		return s.transactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, "yesterday", &sv.TempTransaction)
-
-	case cb.Data == "tx_date_2days":
-		return s.transactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, "2days", &sv.TempTransaction)
-
-	case cb.Data == "tx_date_1week":
-		return s.transactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, "1week", &sv.TempTransaction)
-
-	case cb.Data == "tx_date_1month":
-		return s.transactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, "1month", &sv.TempTransaction)
-
-	// ------- NAVIGATION -------
-	case cb.Data == "portfolios":
-		return s.gfPortfoliosMain(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
-
-	// ------- TRANSACTIONS -------
 	case cb.Data == "cancel_action":
 		s.sessions.clearSession(tgUserID)
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(cb.Message.Chat.ID, sv.BotMessageID))
@@ -121,18 +108,6 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message, sv *UserSession, tgUserID int64) error {
 	// tgUserID := msg.From.ID
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID))
-
-	// handle nil session case (after service restart)
-	if sv == nil {
-		log.Warnf("nil session for user %d message: %s", tgUserID, msg.Text)
-		// send msg to user to start over
-		//FIXME send main menu
-		return s.sendTemporaryMessage(
-			tgbotapi.NewMessage(msg.Chat.ID,
-				"Session lost after restart. Please use /start to begin again."),
-			tgUserID, 20*time.Second)
-	}
-
 	state, ok := s.sessions.getState(tgUserID)
 	if !ok {
 		return nil
@@ -163,8 +138,9 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message, sv *
 	case "waiting_transaction_asset_price":
 		return s.askTransactionDate(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
 
-	case "waiting_transaction_date":
-		return s.transactionConfirmation(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
+		// TODO investigee do i need this if i have callback
+	// case "waiting_transaction_date":
+	// 	return s.asktransactionConfirmation(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
 
 	case "main_menu":
 		text := msg.Text

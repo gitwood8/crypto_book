@@ -14,10 +14,11 @@ type Config struct {
 	DBUser           string
 	DBPassword       string
 	DBName           string
+	BinanceAPIURL    string //FIXME
 }
 
 func Load() *Config {
-	_ = godotenv.Load(".env") // load local .env, if exists
+	_ = godotenv.Load(".env") // load .env, if exists
 
 	cfg := &Config{
 		TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
@@ -26,6 +27,7 @@ func Load() *Config {
 		DBUser:           os.Getenv("DB_USER"),
 		DBPassword:       os.Getenv("DB_PASS"),
 		DBName:           os.Getenv("DB_NAME"),
+		BinanceAPIURL:    os.Getenv("BINANCE_API_URL"), //FIXME
 	}
 
 	if cfg.TelegramBotToken == "" {

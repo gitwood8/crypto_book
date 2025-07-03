@@ -9,8 +9,12 @@ import (
 	t "gitlab.com/avolkov/wood_post/pkg/types"
 )
 
-func (s *Store) AddNewTransaction(ctx context.Context, dbUserID int64, defID int, tx *t.TempTransactionData) error {
-
+func (s *Store) AddNewTransaction(
+	ctx context.Context,
+	dbUserID int64,
+	defID int,
+	tx *t.TempTransactionData,
+) error {
 	query, args, err := s.sqlBuilder.
 		Insert("transactions").
 		Columns(
@@ -22,7 +26,7 @@ func (s *Store) AddNewTransaction(ctx context.Context, dbUserID int64, defID int
 			"transaction_date",
 			"type",
 			"created_at",
-			"note",
+			// "note",
 		).
 		Values(
 			defID,
@@ -99,8 +103,8 @@ func (s *Store) GetLast5TransactionsForUser(ctx context.Context, dbUserID int64)
 			"t.asset_price",
 			"t.amount_usd",
 			"t.transaction_date",
-			"COALESCE(t.note, '') as note",
-			"t.created_at",
+			// "COALESCE(t.note, '') as note",
+			// "t.created_at",
 		).
 		From("transactions t").
 		LeftJoin("portfolios p ON p.id = t.portfolio_id").
@@ -133,8 +137,8 @@ func (s *Store) GetLast5TransactionsForUser(ctx context.Context, dbUserID int64)
 			&tx.AssetPrice,
 			&tx.USDAmount,
 			&tx.TransactionDate,
-			&tx.Note,
-			&tx.CreatedAt,
+			// &tx.Note,
+			// &tx.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan transaction: %w", err)
 		}
@@ -154,8 +158,8 @@ func (s *Store) GetPortfolioSummariesForUser(ctx context.Context, dbUserID int64
 		Select(
 			"p.name as portfolio_name",
 			"t.pair",
-			"SUM(CASE WHEN t.type = 'BUY' THEN t.asset_amount ELSE -t.asset_amount END) as total_amount",
-			"SUM(CASE WHEN t.type = 'BUY' THEN t.amount_usd ELSE -t.amount_usd END) as total_usd",
+			"SUM(CASE WHEN t.type = 'buy' THEN t.asset_amount ELSE -t.asset_amount END) as total_amount",
+			"SUM(CASE WHEN t.type = 'buy' THEN t.amount_usd ELSE -t.amount_usd END) as total_usd",
 		).
 		From("transactions t").
 		InnerJoin("portfolios p ON p.id = t.portfolio_id").
@@ -163,7 +167,7 @@ func (s *Store) GetPortfolioSummariesForUser(ctx context.Context, dbUserID int64
 			"p.user_id": dbUserID,
 		}).
 		GroupBy("p.name", "t.pair").
-		Having("SUM(CASE WHEN t.type = 'BUY' THEN t.asset_amount ELSE -t.asset_amount END) > 0").
+		Having("SUM(CASE WHEN t.type = 'buy' THEN t.asset_amount ELSE -t.asset_amount END) > 0").
 		OrderBy("p.name", "t.pair").
 		ToSql()
 

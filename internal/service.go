@@ -20,7 +20,7 @@ func New(cfg *config.Config) (*Services, error) {
 	}
 	log.Info("internal: db connection established")
 
-	tg, err := telegram_bot.New(cfg.TelegramBotToken, db)
+	tg, err := telegram_bot.New(cfg.TelegramBotToken, db, cfg) //FIXME
 	if err != nil {
 		return nil, err
 	}

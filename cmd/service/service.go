@@ -29,8 +29,10 @@ func main() {
 	defer cancel()
 
 	go func() {
-		if err := services.TelegramBot.Run(ctx); err != nil {
-			log.Error("bot error:", err)
+		log.Info(ctx)
+		err := services.TelegramBot.Run(ctx)
+		if err != nil {
+			log.Error("bot AAAAAAAAAerror:", err)
 		}
 	}()
 
