@@ -71,7 +71,10 @@ func (s *Service) showMainMenu(chatID, tgUserID int64) error {
 	return s.sendTemporaryMessage(mainMenu, tgUserID, 20*time.Second)
 }
 
-func (s *Service) showServiceInfo(chatID, tgUserID int64) error {
+func (s *Service) showServiceInfo(chatID, tgUserID int64, BotMsgID int) error {
+
+	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
+
 	msg := tgbotapi.NewMessage(chatID, t.ServiceDescription)
 	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(

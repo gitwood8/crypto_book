@@ -143,12 +143,15 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 		// Send session expired message
 		expiredMsg := tgbotapi.NewMessage(chatID,
 			"⚠️ *Session Expired*\n\n"+
-				"This button is from before the service restart. Please use the main menu below.")
+				"This button is from before the service restart. Please use the main menu below or enter /start.")
 		expiredMsg.ParseMode = "Markdown"
-		expiredMsg.ReplyMarkup = s.showMainMenu(chatID, tgUserID)
 
-		_, err := s.bot.Send(expiredMsg)
-		return err
+		err := s.sendTemporaryMessage(expiredMsg, tgUserID, 5*time.Second)
+		if err != nil {
+			return err
+		}
+
+		return s.showMainMenu(chatID, tgUserID)
 	}
 
 	switch {

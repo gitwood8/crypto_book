@@ -290,6 +290,11 @@ func (s *Service) asktransactionConfirmation(
 		typeEmoji = "🔵"
 	}
 
+	// portfolioID, err := s.store.GetDefaultPortfolioID(ctx, dbUserID)
+	// if err != nil {
+	// 	return err
+	// }
+
 	// New simplified format
 	tableText := fmt.Sprintf(
 		"*You are about to add a new transaction. Please confirm:*\n\n"+

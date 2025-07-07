@@ -68,7 +68,8 @@ func (calc *PnLCalculator) FetchCurrentPrices(ctx context.Context, pairs []strin
 	}
 
 	// Add headers to identify the request
-	req.Header.Set("User-Agent", "wood_post_bot/1.0")
+	// FIXME why is it here?
+	// req.Header.Set("User-Agent", "wood_post_bot/1.0")
 
 	log.Info("Making request to Binance API", "url", apiURL)
 

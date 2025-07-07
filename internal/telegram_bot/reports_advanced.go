@@ -249,11 +249,11 @@ func (s *Service) formatAdvancedReport(report *t.GeneralReport) string {
 	var builder strings.Builder
 
 	// Header
-	builder.WriteString("📊 *General Portfolio Report*\n")
+	builder.WriteString("📊 *Advanced Portfolios Report*\n")
 	builder.WriteString(fmt.Sprintf("📅 Generated: `%s`\n\n", report.LastUpdated))
 
 	// Individual currency data
-	builder.WriteString("💰 *Individual Assets:*\n\n")
+	builder.WriteString("💰 *Assets over all portfolios:*\n\n")
 
 	for i, data := range report.CurrencyData {
 		// Choose emoji based on PnL
@@ -328,13 +328,12 @@ func (s *Service) formatAdvancedReport(report *t.GeneralReport) string {
 
 		// Add separator except for the last item
 		if i < len(report.CurrencyData)-1 {
-			builder.WriteString("\n" + strings.Repeat("-", 12) + "\n\n")
+			builder.WriteString("\n" + strings.Repeat("-", 35) + "\n\n")
 		}
 	}
 
 	// Overall portfolio summary
-	builder.WriteString("\n" + strings.Repeat("═", 30) + "\n\n")
-	builder.WriteString("📈 *Portfolio Summary:*\n\n")
+	builder.WriteString("\n" + strings.Repeat("—", 20) + "\n\n")
 
 	var totalEmoji string
 	switch {
@@ -373,7 +372,7 @@ func (s *Service) formatAdvancedReport(report *t.GeneralReport) string {
 	}
 
 	builder.WriteString(fmt.Sprintf(
-		"%s *Total Overview*\n"+
+		"%s *Total Overview:*\n\n"+
 			"%s\n"+
 			"💎 Current Value: `$%.2f`\n"+
 			"📊 Total PnL: `%s` (`%s`)\n",

@@ -25,7 +25,7 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return s.checkBeforeCreatePortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID)
 
 	case cb.Data == "who_am_i":
-		return s.showServiceInfo(cb.Message.Chat.ID, tgUserID)
+		return s.showServiceInfo(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)
 
 		// case cb.Data == "gf_portfolios":
 		// 	return s.gfPortfoliosMain(cb.Message.Chat.ID, tgUserID, r.BotMessageID)
@@ -160,7 +160,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message, sv *
 
 		case "Help":
 			log.Infof("main menu: %s", text)
-			return s.showServiceInfo(msg.Chat.ID, tgUserID)
+			return s.showServiceInfo(msg.Chat.ID, tgUserID, sv.BotMessageID)
 		}
 	}
 
