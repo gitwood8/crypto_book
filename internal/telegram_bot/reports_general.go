@@ -67,7 +67,7 @@ func (s *Service) showPortfolioGeneralReport(ctx context.Context, chatID, tgUser
 		grandTotalUSD += portfolioTotalUSD
 
 		if i < len(summaries)-1 {
-			reportText.WriteString("─────────────────────\n")
+			reportText.WriteString(strings.Repeat("─", 21) + "\n")
 		}
 	}
 
@@ -86,5 +86,5 @@ func (s *Service) showPortfolioGeneralReport(ctx context.Context, chatID, tgUser
 		),
 	)
 
-	return s.sendTemporaryMessage(msg, tgUserID, 60*time.Second)
+	return s.sendTemporaryMessage(msg, tgUserID, 90*time.Second)
 }

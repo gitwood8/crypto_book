@@ -18,8 +18,8 @@ func (s *Service) gfReportsMain(chatID, tgUserID int64, BotMsgID int) error {
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
 	actions := []t.Actiontype{
-		{TgText: "General report", CallBackName: "gf_reports_general"},
-		{TgText: "Advanced report", CallBackName: "gf_reports_advanced"},
+		{TgText: "General (historical cost basis)", CallBackName: "gf_reports_general"},
+		{TgText: "Advanced (PnL)", CallBackName: "gf_reports_advanced"},
 		{TgText: "Back to main menu", CallBackName: "cancel_action"},
 	}
 

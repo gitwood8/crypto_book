@@ -40,29 +40,3 @@ type Actiontype struct {
 	TgText       string
 	CallBackName string
 }
-
-type PortfolioAsset struct {
-	Pair        string
-	TotalAmount float64
-	TotalUSD    float64
-}
-
-type PortfolioSummary struct {
-	Name   string
-	Assets []PortfolioAsset
-}
-
-func (e *PriceDataError) Error() string {
-	return e.Message
-}
-
-// Additional types for price data fetching
-type PriceDataError struct {
-	InvalidPairs []string // Pairs that couldn't be fetched
-	Message      string   // Error message
-}
-
-type BinanceErrorResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
-}

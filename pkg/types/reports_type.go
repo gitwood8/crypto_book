@@ -2,7 +2,7 @@ package types
 
 // CurrencyPnLData represents PnL data for a specific currency pair across all portfolios
 type CurrencyPnLData struct {
-	Pair                 string  // e.g., "BTCUSDT"
+	Pair                 string  // "BTCUSDT"
 	TotalAssetAmount     float64 // Total BTC held (sum of all BUY - SELL)
 	TotalInvestedUSD     float64 // Total USD invested (sum of all BUY transactions)
 	CurrentPrice         float64 // Current price from Binance API
@@ -27,4 +27,30 @@ type GeneralReport struct {
 type BinancePriceResponse struct {
 	Symbol string `json:"symbol"`
 	Price  string `json:"price"`
+}
+
+type PortfolioAsset struct {
+	Pair        string
+	TotalAmount float64
+	TotalUSD    float64
+}
+
+type PortfolioSummary struct {
+	Name   string
+	Assets []PortfolioAsset
+}
+
+func (e *PriceDataError) Error() string {
+	return e.Message
+}
+
+// Additional types for price data fetching
+type PriceDataError struct {
+	InvalidPairs []string // Pairs that couldn't be fetched
+	Message      string   // Error message
+}
+
+type BinanceErrorResponse struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
 }

@@ -113,7 +113,7 @@ func (s *Service) showPortfolioAdvancedReport(ctx context.Context, chatID, tgUse
 
 		return s.sendTemporaryMessage(
 			tgbotapi.NewMessage(chatID, errorMsg),
-			tgUserID, 45*time.Second)
+			tgUserID, 30*time.Second)
 	}
 
 	// Format the report for display
@@ -155,6 +155,10 @@ func (s *Service) calculateAdvancedReport(ctx context.Context, calc *PnLCalculat
 	for i, data := range reportData {
 		pairs[i] = data.Pair
 	}
+
+	// FIXME here we have logic where we pop pairs that have no dresponse from Binance,
+	// but we make 1 api request with list of pairs
+	// we should make 1 api request per pair, and then pop pairs that have no response (new branch)
 
 	// Fetch current prices
 	currentPrices, err := calc.FetchCurrentPrices(ctx, pairs)
@@ -328,7 +332,7 @@ func (s *Service) formatAdvancedReport(report *t.GeneralReport) string {
 
 		// Add separator except for the last item
 		if i < len(report.CurrencyData)-1 {
-			builder.WriteString("\n" + strings.Repeat("-", 35) + "\n\n")
+			builder.WriteString("\n" + strings.Repeat("─", 19) + "\n\n")
 		}
 	}
 
