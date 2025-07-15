@@ -48,6 +48,15 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 	case cb.Data == "gf_portfolio_get_default":
 		return s.showDefaultPortfolio(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
 
+	case cb.Data == "gf_delete_transaction":
+		return s.gfTransactionsDelete(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
+
+	case strings.Contains(cb.Data, "gf_delete_transaction_confirmation_"):
+		return s.gfDeleteTransactionConfirmation(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, cb.Data, &sv.TempTransaction)
+
+	case cb.Data == "gf_delete_transaction_confirmed":
+		return s.gfDeleteTransactionConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.TempTransaction.ID, sv.BotMessageID)
+
 	// ----------- REPORTS -----------
 	case cb.Data == "gf_reports_main":
 		return s.gfReportsMain(cb.Message.Chat.ID, tgUserID, sv.BotMessageID)

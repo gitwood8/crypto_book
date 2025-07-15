@@ -102,7 +102,7 @@ func (s *Service) ShowPortfolios(
 		)
 		return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 	}
-
+	// jfc
 	log.Infof("user_id: %d, portfolios list: %s", dbUserID, ps)
 
 	var rows [][]tgbotapi.InlineKeyboardButton

@@ -152,6 +152,25 @@ func (s *Store) GetLast5TransactionsForUser(ctx context.Context, dbUserID int64)
 	return transactions, nil
 }
 
+func (s *Store) DeleteTransaction(ctx context.Context, dbUserID, txID int64) error {
+	query, args, err := s.sqlBuilder.
+		Delete("transactions").
+		Where(sq.Eq{
+			"id": txID}).
+		ToSql()
+
+	if err != nil {
+		return fmt.Errorf("build delete transaction query: %w", err)
+	}
+
+	_, err = s.DB.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("exec delete transaction query: %w", err)
+	}
+
+	return nil
+}
+
 // GetPortfolioSummariesForUser retrieves portfolio summaries with asset totals for a user
 func (s *Store) GetPortfolioSummariesForUser(ctx context.Context, dbUserID int64) ([]t.PortfolioSummary, error) {
 	query, args, err := s.sqlBuilder.

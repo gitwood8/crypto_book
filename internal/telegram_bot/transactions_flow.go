@@ -20,7 +20,7 @@ func (s *Service) gfTransactionsMain(chatID, tgUserID int64, BotMsgID int) error
 	actions := []t.Actiontype{
 		{TgText: "Add transaction", CallBackName: "gf_add_transaction"},
 		{TgText: "Show last 5 added transactions", CallBackName: "gf_show_last_5_transactions"},
-		// {TgText: "Get default", CallBackName: "gf_portfolio_get_default"},
+		{TgText: "Delete transaction", CallBackName: "gf_delete_transaction"},
 		// {TgText: "Change default", CallBackName: "gf_portfolio_change_default"},
 		// {TgText: "Rename", CallBackName: "gf_portfolio_rename"},
 		{TgText: "Back to main menu", CallBackName: "cancel_action"},

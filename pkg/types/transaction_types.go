@@ -3,6 +3,7 @@ package types
 import "time"
 
 type TempTransactionData struct {
+	ID              int64
 	Pair            string
 	Type            string
 	AssetAmount     float64
