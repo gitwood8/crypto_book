@@ -86,15 +86,15 @@ func (s *Service) showServiceInfo(chatID, tgUserID int64, BotMsgID int) error {
 	return s.sendTemporaryMessage(msg, tgUserID, 200*time.Second)
 }
 
-func (s *Service) sendTgMessage(msg tgbotapi.Chattable, tgUserID int64) error {
-	sentMsg, err := s.bot.Send(msg)
-	if err != nil {
-		return fmt.Errorf("failed to send message: %w", err)
-	}
-	// fmt.Println("bot message id from func 1: ", sentMsg.MessageID)
-	s.sessions.setTempField(tgUserID, "BotMessageID", sentMsg.MessageID)
-	return nil
-}
+// func (s *Service) sendTgMessage(msg tgbotapi.Chattable, tgUserID int64) error {
+// 	sentMsg, err := s.bot.Send(msg)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to send message: %w", err)
+// 	}
+// 	// fmt.Println("bot message id from func 1: ", sentMsg.MessageID)
+// 	s.sessions.setTempField(tgUserID, "BotMessageID", sentMsg.MessageID)
+// 	return nil
+// }
 
 func (s *Service) sendTemporaryMessage(msg tgbotapi.Chattable, tgUserID int64, delay time.Duration) error {
 	sentMsg, err := s.bot.Send(msg)
@@ -126,14 +126,14 @@ func (s *Service) editMessageText(chatID int64, messageID int, text string) erro
 	return nil
 }
 
-func (s *Service) sendTestMessage(chatID int64, messageID int, text string) error {
-	fmt.Println("editMessageText started: ", chatID, messageID, text)
-	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
-	edit.ParseMode = "Markdown"
-	_, err := s.bot.Send(edit)
+// func (s *Service) sendTestMessage(chatID int64, messageID int, text string) error {
+// 	fmt.Println("editMessageText started: ", chatID, messageID, text)
+// 	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+// 	edit.ParseMode = "Markdown"
+// 	_, err := s.bot.Send(edit)
 
-	if err != nil {
-		return err
-	}
-	return nil
-}
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }

@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     id BIGSERIAL PRIMARY KEY,
     portfolio_id BIGINT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
     type TEXT CHECK (type IN ('buy', 'sell', 'transfer')),
-    pair TEXT NOT NULL,
+    asset TEXT NOT NULL,  -- Asset ticker like "BTC", "ETH"
     asset_amount NUMERIC(18,8) NOT NULL,
     asset_price NUMERIC(18,8) NOT NULL,
     amount_usd NUMERIC(12,2) NOT NULL,

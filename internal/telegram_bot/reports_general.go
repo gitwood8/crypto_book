@@ -10,11 +10,11 @@ import (
 	"gitlab.com/avolkov/wood_post/pkg/log"
 )
 
-// showPortfolioGeneralReport displays the historical cost basis report (like screenshot 2)
+// displays the historical cost basis report (like screenshot 2)
 func (s *Service) showPortfolioGeneralReport(ctx context.Context, chatID, tgUserID, dbUserID int64, BotMsgID int) error {
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	// Get portfolio summaries for historical cost basis
+	// get portfolio summaries for historical cost basis
 	summaries, err := s.store.GetPortfolioSummariesForUser(ctx, dbUserID)
 	if err != nil {
 		log.Error("Failed to get portfolio summaries", "error", err, "user_id", dbUserID)
@@ -36,7 +36,7 @@ func (s *Service) showPortfolioGeneralReport(ctx context.Context, chatID, tgUser
 		return s.sendTemporaryMessage(msg, tgUserID, 30*time.Second)
 	}
 
-	// Build the basic report message (like screenshot 2)
+	// build the basic report message (like screenshot 2)
 	var reportText strings.Builder
 	reportText.WriteString("📊 *GENERAL PORTFOLIO REPORT*\n")
 	reportText.WriteString("_(Historical cost basis only)_\n\n")
@@ -51,11 +51,11 @@ func (s *Service) showPortfolioGeneralReport(ctx context.Context, chatID, tgUser
 
 		var portfolioTotalUSD float64
 		for _, asset := range summary.Assets {
-			// Extract base asset from pair
-			baseCurrency := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(asset.Pair, "USDT"), "USDC"), "USD"), "EUR")
+			// use asset ticker directly (we already have BTC, ETH, etc.)
+			baseCurrency := asset.Asset
 
 			reportText.WriteString(fmt.Sprintf("%s: %.6g %s, invested: %.2f USD\n",
-				asset.Pair,
+				asset.Asset,
 				asset.TotalAmount,
 				baseCurrency,
 				asset.TotalUSD))

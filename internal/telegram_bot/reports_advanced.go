@@ -12,11 +12,11 @@ import (
 	t "gitlab.com/avolkov/wood_post/pkg/types"
 )
 
-// showPortfolioAdvancedReport displays the full PnL report with current prices (like screenshot 1)
+// displays the full PnL report with current prices (like screenshot 1)
 func (s *Service) showPortfolioAdvancedReport(ctx context.Context, chatID, tgUserID, dbUserID int64, BotMsgID int) error {
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	// Show loading message since this operation can take a few seconds
+	// show loading message since this operation can take a few seconds
 	loadingMsg := tgbotapi.NewMessage(chatID, "🔄 *Generating comprehensive PnL report...*\n\nFetching current prices and calculating metrics...")
 	loadingMsg.ParseMode = "Markdown"
 	loadingMessage, err := s.bot.Send(loadingMsg)
@@ -24,12 +24,12 @@ func (s *Service) showPortfolioAdvancedReport(ctx context.Context, chatID, tgUse
 		log.Warn("Failed to send loading message", "error", err)
 	}
 
-	// Get aggregated transaction data from database
+	// get aggregated transaction data from database
 	reportData, err := s.store.GetReportData(ctx, dbUserID)
 	if err != nil {
 		log.Error("Failed to get report data", "error", err, "user_id", dbUserID)
 
-		// Delete loading message if it was sent
+		// delete loading message if it was sent
 		if loadingMessage.MessageID != 0 {
 			_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, loadingMessage.MessageID))
 		}
@@ -39,9 +39,9 @@ func (s *Service) showPortfolioAdvancedReport(ctx context.Context, chatID, tgUse
 			tgUserID, 20*time.Second)
 	}
 
-	// Check if user has any active positions
+	// check if user has any active positions
 	if len(reportData) == 0 {
-		// Delete loading message
+		// delete loading message
 		if loadingMessage.MessageID != 0 {
 			_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, loadingMessage.MessageID))
 		}
@@ -59,25 +59,25 @@ func (s *Service) showPortfolioAdvancedReport(ctx context.Context, chatID, tgUse
 		return s.sendTemporaryMessage(msg, tgUserID, 30*time.Second)
 	}
 
-	// Initialize PnL calculator with Binance API
+	// initialize PnL calculator with Binance API
 	pnlCalc := &PnLCalculator{
 		binanceAPIURL: s.cfg.BinanceAPIURL,
 		httpClient:    &http.Client{Timeout: 15 * time.Second},
 	}
 
-	// Calculate comprehensive PnL report
+	// calculate comprehensive PnL report
 	report, err := s.calculateAdvancedReport(ctx, pnlCalc, reportData)
 	if err != nil {
 		log.Error("Failed to calculate PnL report", "error", err, "user_id", dbUserID)
 
-		// Delete loading message
+		// delete loading message
 		if loadingMessage.MessageID != 0 {
 			_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, loadingMessage.MessageID))
 		}
 
 		errorMsg := "❌ Failed to fetch current prices or calculate PnL.\n\n"
 
-		// Provide specific error messages based on the error type
+		// provide specific error messages based on the error type
 		errorStr := err.Error()
 		if strings.Contains(errorStr, "no valid prices found") {
 			errorMsg += "🔍 **Price Data Issue:**\n"
@@ -116,15 +116,15 @@ func (s *Service) showPortfolioAdvancedReport(ctx context.Context, chatID, tgUse
 			tgUserID, 30*time.Second)
 	}
 
-	// Format the report for display
+	// format the report for display
 	reportText := s.formatAdvancedReport(report)
 
-	// Delete loading message
+	// delete loading message
 	if loadingMessage.MessageID != 0 {
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, loadingMessage.MessageID))
 	}
 
-	// Send the comprehensive report
+	// send the comprehensive report
 	msg := tgbotapi.NewMessage(chatID, reportText)
 	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
@@ -141,7 +141,7 @@ func (s *Service) showPortfolioAdvancedReport(ctx context.Context, chatID, tgUse
 	return s.sendTemporaryMessage(msg, tgUserID, 120*time.Second)
 }
 
-// calculateAdvancedReport performs all PnL calculations using the mathematical formulas
+// performs all PnL calculations using the mathematical formulas
 func (s *Service) calculateAdvancedReport(ctx context.Context, calc *PnLCalculator, reportData []t.CurrencyPnLData) (*t.GeneralReport, error) {
 	if len(reportData) == 0 {
 		return &t.GeneralReport{
@@ -150,49 +150,50 @@ func (s *Service) calculateAdvancedReport(ctx context.Context, calc *PnLCalculat
 		}, nil
 	}
 
-	// Extract all pairs for API call
+	// extract all assets and convert to pairs for API call
 	pairs := make([]string, len(reportData))
 	for i, data := range reportData {
-		pairs[i] = data.Pair
+		pairs[i] = data.Asset + "USDT" //FIXME move to global vars (or config)
 	}
 
 	// FIXME here we have logic where we pop pairs that have no dresponse from Binance,
 	// but we make 1 api request with list of pairs
 	// we should make 1 api request per pair, and then pop pairs that have no response (new branch)
 
-	// Fetch current prices
+	// fetch current prices
 	currentPrices, err := calc.FetchCurrentPrices(ctx, pairs)
 	if err != nil {
 		return nil, fmt.Errorf("fetch current prices: %w", err)
 	}
 
-	// Calculate PnL for each currency pair
+	// calculate PnL for each currency pair
 	var calculatedData []t.CurrencyPnLData
 	var totalInvested, totalCurrentValue float64
 	var skippedPairs []string
 
 	for _, data := range reportData {
-		currentPrice, priceExists := currentPrices[data.Pair]
+		pair := data.Asset + "USDT" // FIXME Convert asset ticker to USDT pair for price lookup (check if its required)
+		currentPrice, priceExists := currentPrices[pair]
 		if !priceExists {
-			log.Warn("No current price found for pair", "pair", data.Pair)
-			skippedPairs = append(skippedPairs, data.Pair)
+			log.Warn("No current price found for asset", "asset", data.Asset, "pair", pair)
+			skippedPairs = append(skippedPairs, data.Asset)
 			continue
 		}
 
-		// Apply the mathematical formulas:
+		// apply the mathematical formulas:
 		data.CurrentPrice = currentPrice
 		data.CurrentValueUSD = data.TotalAssetAmount * currentPrice
 		data.PnLUSD = data.CurrentValueUSD - data.TotalInvestedUSD
 
-		// Calculate PnL percentage - handle negative assets properly
+		// calculate PnL percentage - handle negative assets properly
 		if data.TotalInvestedUSD > 0 {
 			data.PnLPercentage = ((data.CurrentValueUSD / data.TotalInvestedUSD) - 1) * 100
 		} else if data.TotalInvestedUSD < 0 {
-			// Negative invested means they took out more than they put in
-			// In this case, any remaining value is pure profit
+			// negative invested means they took out more than they put in
+			// in this case, any remaining value is pure profit
 			data.PnLPercentage = 999.99 // Indicates "pure profit" scenario
 		} else {
-			// Edge case: exactly zero net invested
+			// edge case: exactly zero net invested
 			data.PnLPercentage = 0
 		}
 
@@ -203,17 +204,17 @@ func (s *Service) calculateAdvancedReport(ctx context.Context, calc *PnLCalculat
 		totalCurrentValue += data.CurrentValueUSD
 	}
 
-	// Log skipped pairs if any
+	// log skipped pairs if any
 	if len(skippedPairs) > 0 {
 		log.Warn("Skipped pairs due to missing price data", "skipped_pairs", skippedPairs, "skipped_count", len(skippedPairs))
 	}
 
-	// Check if we have any valid data to report
+	// check if we have any valid data to report
 	if len(calculatedData) == 0 {
 		return nil, fmt.Errorf("no valid price data available for any of the requested pairs")
 	}
 
-	// Calculate overall portfolio metrics
+	// calculate overall portfolio metrics
 	totalPnL := totalCurrentValue - totalInvested
 	var totalPnLPercent float64
 	if totalInvested > 0 {
@@ -231,18 +232,18 @@ func (s *Service) calculateAdvancedReport(ctx context.Context, calc *PnLCalculat
 		LastUpdated:        time.Now().Format("2006-01-02 15:04:05"),
 	}
 
-	// Add skipped pairs information to the report for display
+	// add skipped pairs information to the report for display
 	if len(skippedPairs) > 0 {
-		// Store skipped pairs in the report for later display
-		// We'll add this as a custom field or handle it in the format function
+		// store skipped pairs in the report for later display
+		// we'll add this as a custom field or handle it in the format function
 		log.Info("Report generated with some skipped pairs", "processed_pairs", len(calculatedData), "skipped_pairs", len(skippedPairs))
 	}
 
 	return report, nil
 }
 
-// formatAdvancedReport creates the advanced report with the specific format requested:
-// pair | total_asset_amount | total_invested_amount_usd | PnL% | PnL USD | current_value | average_purchase_price
+// creates the advanced report with the specific format requested:
+// asset | total_asset_amount | total_invested_amount_usd | PnL% | PnL USD | current_value | average_purchase_price
 func (s *Service) formatAdvancedReport(report *t.GeneralReport) string {
 	if len(report.CurrencyData) == 0 {
 		return "*📊 General Portfolio Report*\n\n" +
@@ -252,15 +253,15 @@ func (s *Service) formatAdvancedReport(report *t.GeneralReport) string {
 
 	var builder strings.Builder
 
-	// Header
+	// header
 	builder.WriteString("📊 *Advanced Portfolios Report*\n")
 	builder.WriteString(fmt.Sprintf("📅 Generated: `%s`\n\n", report.LastUpdated))
 
-	// Individual currency data
+	// individual currency data
 	builder.WriteString("💰 *Assets over all portfolios:*\n\n")
 
 	for i, data := range report.CurrencyData {
-		// Choose emoji based on PnL
+		// choose emoji based on PnL
 		var pnlEmoji string
 		switch {
 		case data.PnLUSD > 0:
@@ -271,38 +272,38 @@ func (s *Service) formatAdvancedReport(report *t.GeneralReport) string {
 			pnlEmoji = "⚪"
 		}
 
-		// Extract base currency (BTC from BTCUSDT)
-		baseCurrency := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(data.Pair, "USDT"), "USDC"), "USD"), "EUR")
+		// use the asset ticker directly (we already have BTC, ETH, etc.)
+		baseCurrency := data.Asset
 
-		// Format invested amount - handle negative case (when more was taken out than invested)
+		// format invested amount - handle negative case (when more was taken out than invested)
 		var investedText string
 		if data.TotalInvestedUSD >= 0 {
 			investedText = fmt.Sprintf("Net Invested: `$%.2f`", data.TotalInvestedUSD)
 		} else {
-			// Negative invested means they took out more than they put in
+			// negative invested means they took out more than they put in
 			investedText = fmt.Sprintf("Net Profit Taken: `$%.2f`", -data.TotalInvestedUSD)
 		}
 
-		// Format PnL with proper signs
+		// format PnL with proper signs
 		var pnlUSDText, pnlPercentText string
 		if data.PnLUSD >= 0 {
 			pnlUSDText = fmt.Sprintf("+$%.2f", data.PnLUSD)
 		} else {
-			pnlUSDText = fmt.Sprintf("$%.2f", data.PnLUSD) // Negative sign already included
+			pnlUSDText = fmt.Sprintf("$%.2f", data.PnLUSD) // negative sign already included
 		}
 
 		if data.PnLPercentage >= 0 {
 			pnlPercentText = fmt.Sprintf("+%.2f%%", data.PnLPercentage)
 		} else {
-			pnlPercentText = fmt.Sprintf("%.2f%%", data.PnLPercentage) // Already has negative sign
+			pnlPercentText = fmt.Sprintf("%.2f%%", data.PnLPercentage) // already has negative sign
 		}
 
-		// Handle special "pure profit" case
+		// handle special "pure profit" case
 		if data.PnLPercentage == 999.99 {
 			pnlPercentText = "🚀 PURE PROFIT"
 		}
 
-		// Show break-even status
+		// show break-even status
 		var breakEvenStatus string
 		if data.CurrentPrice < data.AveragePurchasePrice {
 			breakEvenStatus = "📉 *Below break-even*"
@@ -318,7 +319,7 @@ func (s *Service) formatAdvancedReport(report *t.GeneralReport) string {
 				"Avg Buy Price: `$%.2f` %s\n"+
 				"PnL: `%s` (`%s`)\n",
 			pnlEmoji,
-			data.Pair,
+			data.Asset,
 			data.TotalAssetAmount,
 			baseCurrency,
 			investedText,
@@ -330,13 +331,13 @@ func (s *Service) formatAdvancedReport(report *t.GeneralReport) string {
 			pnlPercentText,
 		))
 
-		// Add separator except for the last item
+		// add separator except for the last item
 		if i < len(report.CurrencyData)-1 {
 			builder.WriteString("\n" + strings.Repeat("─", 19) + "\n\n")
 		}
 	}
 
-	// Overall portfolio summary
+	// overall portfolio summary
 	builder.WriteString("\n" + strings.Repeat("—", 20) + "\n\n")
 
 	var totalEmoji string
@@ -349,7 +350,7 @@ func (s *Service) formatAdvancedReport(report *t.GeneralReport) string {
 		totalEmoji = "⚖️"
 	}
 
-	// Format total amounts with proper signs
+	// format total amounts with proper signs
 	var totalInvestedText string
 	if report.TotalInvestedUSD >= 0 {
 		totalInvestedText = fmt.Sprintf("💸 Net Invested: `$%.2f`", report.TotalInvestedUSD)
@@ -370,7 +371,7 @@ func (s *Service) formatAdvancedReport(report *t.GeneralReport) string {
 		totalPnLPercentText = fmt.Sprintf("%.2f%%", report.TotalPnLPercentage)
 	}
 
-	// Handle special "pure profit" case for total
+	// handle special "pure profit" case for total
 	if report.TotalPnLPercentage == 999.99 {
 		totalPnLPercentText = "🚀 PURE PROFIT"
 	}

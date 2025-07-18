@@ -20,7 +20,7 @@ func (s *Service) gfTransactionsMain(chatID, tgUserID int64, BotMsgID int) error
 	actions := []t.Actiontype{
 		{TgText: "Add transaction", CallBackName: "gf_add_transaction"},
 		{TgText: "Show last 5 added transactions", CallBackName: "gf_show_last_5_transactions"},
-		// {TgText: "Get default", CallBackName: "gf_portfolio_get_default"},
+		{TgText: "Delete transaction", CallBackName: "gf_delete_transaction"},
 		// {TgText: "Change default", CallBackName: "gf_portfolio_change_default"},
 		// {TgText: "Rename", CallBackName: "gf_portfolio_rename"},
 		{TgText: "Back to main menu", CallBackName: "cancel_action"},
@@ -81,7 +81,7 @@ func (s *Service) askTransactionType(
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 }
 
-func (s *Service) askTransactionPair(
+func (s *Service) askTransactionAsset(
 	ctx context.Context,
 	chatID, tgUserID, dbUserID int64,
 	BotMsgID int,
@@ -98,27 +98,27 @@ func (s *Service) askTransactionPair(
 	log.Info("chosen tx type: ", txTypeClean)
 
 	msg := tgbotapi.NewMessage(chatID,
-		"Please choose a currency pair or enter a new one (e.g. DOGEUSDT, SOLUSDT. 'btc usdt' - also fine).")
+		"Please choose an asset ticker or enter a new one (e.g. BTC, eth, DoGe).")
 	msg.ParseMode = "Markdown"
 
-	var topPairs []string
+	var topAssets []string
 
-	topPairs, err := s.store.GetTopPairsForUser(ctx, dbUserID)
+	topAssets, err := s.store.GetTopAssetsForUser(ctx, dbUserID)
 	if err != nil {
 		return err
 	}
 
-	defaultPairs := t.DefaultCryptoPairs
+	defaultAssets := t.DefaultCryptoPairs
 
-	allPairs := s.mergeUniqueTxPairs(defaultPairs, topPairs)
+	allAssets := s.mergeUniqueAssets(defaultAssets, topAssets)
 
 	var rows [][]tgbotapi.InlineKeyboardButton
-	for i := 0; i < len(allPairs); i += 2 {
+	for i := 0; i < len(allAssets); i += 2 {
 		row := []tgbotapi.InlineKeyboardButton{
-			tgbotapi.NewInlineKeyboardButtonData(allPairs[i], "tx_pair_chosen_"+allPairs[i]),
+			tgbotapi.NewInlineKeyboardButtonData(allAssets[i], "tx_asset_chosen_"+allAssets[i]),
 		}
-		if i+1 < len(allPairs) {
-			row = append(row, tgbotapi.NewInlineKeyboardButtonData(allPairs[i+1], "tx_pair_chosen_"+allPairs[i+1]))
+		if i+1 < len(allAssets) {
+			row = append(row, tgbotapi.NewInlineKeyboardButtonData(allAssets[i+1], "tx_asset_chosen_"+allAssets[i+1]))
 		}
 		rows = append(rows, row)
 	}
@@ -129,7 +129,7 @@ func (s *Service) askTransactionPair(
 
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
 
-	s.sessions.setState(tgUserID, "waiting_transaction_pair")
+	s.sessions.setState(tgUserID, "waiting_transaction_asset")
 	return s.sendTemporaryMessage(msg, tgUserID, 20*time.Second)
 }
 
@@ -139,19 +139,16 @@ func (s *Service) askTransactionAssetAmount(
 	msgText string,
 	txData *t.TempTransactionData,
 ) error {
-	// fmt.Println("raw", msgText)
-	selectedPair := strings.TrimPrefix(msgText, "tx_pair_chosen_")
-
-	// fmt.Println("after trim", selectedPair)
+	selectedAsset := strings.TrimPrefix(msgText, "tx_asset_chosen_")
 
 	_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, BotMsgID))
 
-	result, err := s.handleTransactionValidationError(selectedPair, "pair", chatID, tgUserID)
+	result, err := s.handleTransactionValidationError(selectedAsset, "asset", chatID, tgUserID)
 	if err != nil {
 		return err
 	}
 
-	txData.Pair = result.(string)
+	txData.Asset = result.(string)
 
 	msg := tgbotapi.NewMessage(chatID,
 		"Enter the asset amount (e.g. 1234, 12.34).")
@@ -306,10 +303,10 @@ func (s *Service) asktransactionConfirmation(
 			"Date: `%s`\n",
 		typeEmoji,
 		strings.ToUpper(txData.Type),
-		txData.Pair,
+		txData.Asset, // FIXME check if its correct
 		strings.ToUpper(txData.Type),
 		txData.AssetAmount,
-		s.extractBaseCurrency(txData.Pair),
+		txData.Asset,
 		txData.AssetPrice,
 		txData.USDAmount,
 		txData.TransactionDate.Format("2006-01-02"),
@@ -348,7 +345,7 @@ func (s *Service) transactionConfirmed(
 	err = s.sendTemporaryMessage(
 		tgbotapi.NewMessage(
 			chatID,
-			fmt.Sprintf("Transaction added successfully: %s, %.2f USD!", txData.Pair, txData.USDAmount)),
+			fmt.Sprintf("Transaction added successfully: %s, %.2f USD!", txData.Asset, txData.USDAmount)),
 		tgUserID,
 		10*time.Second)
 	if err != nil {
@@ -364,16 +361,15 @@ func (s *Service) transactionValidateInput(rawText string, inputType string) (an
 	text := strings.TrimSpace(rawText)
 
 	switch inputType {
-	case "pair":
-		re := regexp.MustCompile(`[\s/\\-]+`)
-		cleaned := strings.ToUpper(re.ReplaceAllString(text, ""))
+	case "asset":
+		cleaned := strings.ToUpper(strings.TrimSpace(text)) // FIXME test this
 
-		// Crypto pair validation: 3-8 chars for base + 3-8 chars for quote
-		validRe := regexp.MustCompile(`^[A-Z]{3,8}[A-Z]{3,8}$`)
+		// Asset ticker validation: 3-8 characters, only letters
+		validRe := regexp.MustCompile(`^[A-Z]{3,8}$`)
 		if !validRe.MatchString(cleaned) {
-			log.Warnf("invalid pair format: %s", cleaned)
-			return "Wrong pair format. Use format like 'BTCUSDT', 'ETHUSDT', or 'btc usdt'. Only letters allowed, 6-16 characters total.",
-				fmt.Errorf("invalid pair format") // FIXME no error in logs, so why?
+			log.Warnf("invalid asset format: %s", cleaned)
+			return "Wrong asset format. Use asset ticker like 'BTC', 'ETH', 'DOGE'. Only letters allowed, 3-8 characters total.",
+				fmt.Errorf("invalid asset format")
 		}
 
 		return cleaned, nil
@@ -466,9 +462,8 @@ func (s *Service) transactionValidateInput(rawText string, inputType string) (an
 	}
 }
 
-// handleTransactionValidationError is a helper method to handle validation errors consistently
+// helper method to handle validation errors consistently
 // It validates input and sends error message if validation fails
-// Returns (validatedResult, error) - if error is not nil, caller should return early
 func (s *Service) handleTransactionValidationError(
 	msgText, inputType string,
 	chatID, tgUserID int64,
@@ -493,14 +488,14 @@ func (s *Service) handleTransactionValidationError(
 	return result, nil
 }
 
-func (s *Service) mergeUniqueTxPairs(defaultPairs, topPairs []string) []string {
+func (s *Service) mergeUniqueAssets(defaultAssets, topAssets []string) []string {
 	unique := make(map[string]struct{})
 	var result []string
 
-	for _, pair := range append(defaultPairs, topPairs...) {
-		if _, exists := unique[pair]; !exists {
-			unique[pair] = struct{}{}
-			result = append(result, pair)
+	for _, asset := range append(defaultAssets, topAssets...) {
+		if _, exists := unique[asset]; !exists {
+			unique[asset] = struct{}{}
+			result = append(result, asset)
 		}
 	}
 	return result
@@ -537,7 +532,7 @@ func (s *Service) showLast5Transactions(
 		return s.sendTemporaryMessage(msg, tgUserID, 30*time.Second)
 	}
 
-	// Format transactions in a user-friendly way
+	// format transactions in a user-friendly way
 	var messageText strings.Builder
 	messageText.WriteString("*Your Last 5 Transactions:*\n\n")
 
@@ -561,21 +556,21 @@ func (s *Service) showLast5Transactions(
 				"Date: `%s`\n",
 			typeEmoji,
 			strings.ToUpper(tx.Type),
-			tx.Pair,
+			tx.Asset, // FIXME check if its correct
 			tx.PortfolioName,
 			tx.AssetAmount,
-			s.extractBaseCurrency(tx.Pair),
+			tx.Asset,
 			tx.AssetPrice,
 			tx.USDAmount,
 			tx.TransactionDate.Format("2006-01-02"),
 		))
 
-		// Add note if available
+		// add note if available
 		if tx.Note != "" {
 			messageText.WriteString(fmt.Sprintf("📝 Note: `%s`\n", tx.Note))
 		}
 
-		// Add separator except for last transaction
+		// add separator except for last transaction
 		if i < len(transactions)-1 {
 			messageText.WriteString("\n" + strings.Repeat("─", 17) + "\n\n")
 		}
@@ -596,21 +591,4 @@ func (s *Service) showLast5Transactions(
 	)
 
 	return s.sendTemporaryMessage(msg, tgUserID, 40*time.Second)
-}
-
-// Helper function to extract base currency from pair ("BTCUSDT" -> "BTC")
-func (s *Service) extractBaseCurrency(pair string) string {
-	commonQuotes := []string{"USDT", "USDC", "USD", "EUR", "BTC", "ETH", "BNB"}
-
-	for _, quote := range commonQuotes {
-		if strings.HasSuffix(pair, quote) && len(pair) > len(quote) {
-			return pair[:len(pair)-len(quote)]
-		}
-	}
-
-	// Fallback: if no common quote found, return first 3-4 characters
-	if len(pair) > 6 {
-		return pair[:len(pair)/2]
-	}
-	return pair
 }
