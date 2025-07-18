@@ -19,7 +19,7 @@ func (s *Store) AddNewTransaction(
 		Insert("transactions").
 		Columns(
 			"portfolio_id",
-			"pair",
+			"asset",
 			"asset_amount",
 			"asset_price",
 			"amount_usd",
@@ -30,7 +30,7 @@ func (s *Store) AddNewTransaction(
 		).
 		Values(
 			defID,
-			tx.Pair,
+			tx.Asset,
 			tx.AssetAmount,
 			tx.AssetPrice,
 			tx.USDAmount,
@@ -51,54 +51,54 @@ func (s *Store) AddNewTransaction(
 	return nil // will be fixed
 }
 
-func (s *Store) GetTopPairsForUser(ctx context.Context, dbUserID int64) ([]string, error) {
+func (s *Store) GetTopAssetsForUser(ctx context.Context, dbUserID int64) ([]string, error) {
 	query, args, err := s.sqlBuilder.
-		Select("t.pair").
+		Select("t.asset").
 		From("transactions t").
 		LeftJoin("portfolios p ON p.id = t.portfolio_id").
 		Where(sq.Eq{
 			"p.user_id": dbUserID,
 		}).
-		GroupBy("p.user_id, t.pair").
-		OrderBy("COUNT(t.pair) DESC").
+		GroupBy("p.user_id, t.asset").
+		OrderBy("COUNT(t.asset) DESC").
 		Limit(5).
 		ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf("build top pairs query: %w", err)
+		return nil, fmt.Errorf("build top assets query: %w", err)
 	}
 
 	rows, err := s.DB.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("exec top pairs query: %w", err)
+		return nil, fmt.Errorf("exec top assets query: %w", err)
 	}
 	defer rows.Close()
 
-	var pairs []string
+	var assets []string
 	for rows.Next() {
-		var pair string
-		if err := rows.Scan(&pair); err != nil {
-			return nil, fmt.Errorf("scan top pair: %w", err)
+		var asset string
+		if err := rows.Scan(&asset); err != nil {
+			return nil, fmt.Errorf("scan top asset: %w", err)
 		}
-		pairs = append(pairs, pair)
+		assets = append(assets, asset)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("rows iteration error: %w", err)
 	}
 
-	return pairs, nil
+	return assets, nil
 }
 
 // FIXME
-// GetLast5TransactionsForUser retrieves the last 5 transactions for a user with portfolio information
+// retrieves the last 5 transactions for a user with portfolio information
 func (s *Store) GetLast5TransactionsForUser(ctx context.Context, dbUserID int64) ([]t.Transaction, error) {
 	query, args, err := s.sqlBuilder.
 		Select(
 			"t.id",
 			"p.name as portfolio_name",
 			"t.type",
-			"t.pair",
+			"t.asset",
 			"t.asset_amount",
 			"t.asset_price",
 			"t.amount_usd",
@@ -132,7 +132,7 @@ func (s *Store) GetLast5TransactionsForUser(ctx context.Context, dbUserID int64)
 			&tx.ID,
 			&tx.PortfolioName,
 			&tx.Type,
-			&tx.Pair,
+			&tx.Asset,
 			&tx.AssetAmount,
 			&tx.AssetPrice,
 			&tx.USDAmount,
@@ -171,12 +171,12 @@ func (s *Store) DeleteTransaction(ctx context.Context, dbUserID, txID int64) err
 	return nil
 }
 
-// GetPortfolioSummariesForUser retrieves portfolio summaries with asset totals for a user
+// retrieves portfolio summaries with asset totals for a user
 func (s *Store) GetPortfolioSummariesForUser(ctx context.Context, dbUserID int64) ([]t.PortfolioSummary, error) {
 	query, args, err := s.sqlBuilder.
 		Select(
 			"p.name as portfolio_name",
-			"t.pair",
+			"t.asset",
 			"SUM(CASE WHEN t.type = 'buy' THEN t.asset_amount ELSE -t.asset_amount END) as total_amount",
 			"SUM(CASE WHEN t.type = 'buy' THEN t.amount_usd ELSE -t.amount_usd END) as total_usd",
 		).
@@ -185,9 +185,9 @@ func (s *Store) GetPortfolioSummariesForUser(ctx context.Context, dbUserID int64
 		Where(sq.Eq{
 			"p.user_id": dbUserID,
 		}).
-		GroupBy("p.name", "t.pair").
+		GroupBy("p.name", "t.asset").
 		Having("SUM(CASE WHEN t.type = 'buy' THEN t.asset_amount ELSE -t.asset_amount END) > 0").
-		OrderBy("p.name", "t.pair").
+		OrderBy("p.name", "t.asset").
 		ToSql()
 
 	if err != nil {
@@ -204,20 +204,20 @@ func (s *Store) GetPortfolioSummariesForUser(ctx context.Context, dbUserID int64
 	portfolioMap := make(map[string][]t.PortfolioAsset)
 
 	for rows.Next() {
-		var portfolioName, pair string
+		var portfolioName, asset string
 		var totalAmount, totalUSD float64
 
-		if err := rows.Scan(&portfolioName, &pair, &totalAmount, &totalUSD); err != nil {
+		if err := rows.Scan(&portfolioName, &asset, &totalAmount, &totalUSD); err != nil {
 			return nil, fmt.Errorf("scan portfolio summary: %w", err)
 		}
 
-		asset := t.PortfolioAsset{
-			Pair:        pair,
+		portfolioAsset := t.PortfolioAsset{
+			Asset:       asset,
 			TotalAmount: totalAmount,
 			TotalUSD:    totalUSD,
 		}
 
-		portfolioMap[portfolioName] = append(portfolioMap[portfolioName], asset)
+		portfolioMap[portfolioName] = append(portfolioMap[portfolioName], portfolioAsset)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -236,11 +236,11 @@ func (s *Store) GetPortfolioSummariesForUser(ctx context.Context, dbUserID int64
 	return summaries, nil
 }
 
-// GetReportData retrieves aggregated transaction data across all portfolios for PnL calculations
+// retrieves aggregated transaction data across all portfolios for PnL calculations
 func (s *Store) GetReportData(ctx context.Context, dbUserID int64) ([]t.CurrencyPnLData, error) {
 	query, args, err := s.sqlBuilder.
 		Select(
-			"t.pair",
+			"t.asset",
 			"SUM(CASE WHEN t.type = 'buy' THEN t.asset_amount ELSE -t.asset_amount END) as total_asset_amount",
 			"SUM(CASE WHEN t.type = 'buy' THEN t.amount_usd ELSE 0 END) as total_invested_usd",
 		).
@@ -249,9 +249,9 @@ func (s *Store) GetReportData(ctx context.Context, dbUserID int64) ([]t.Currency
 		Where(sq.Eq{
 			"p.user_id": dbUserID,
 		}).
-		GroupBy("t.pair").
+		GroupBy("t.asset").
 		Having("SUM(CASE WHEN t.type = 'buy' THEN t.asset_amount ELSE -t.asset_amount END) > 0").
-		OrderBy("t.pair").
+		OrderBy("t.asset").
 		ToSql()
 
 	if err != nil {
@@ -268,7 +268,7 @@ func (s *Store) GetReportData(ctx context.Context, dbUserID int64) ([]t.Currency
 	for rows.Next() {
 		var data t.CurrencyPnLData
 		if err := rows.Scan(
-			&data.Pair,
+			&data.Asset,
 			&data.TotalAssetAmount,
 			&data.TotalInvestedUSD,
 		); err != nil {

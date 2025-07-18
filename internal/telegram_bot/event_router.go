@@ -93,12 +93,12 @@ func (s *Service) handleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return s.showLast5Transactions(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID)
 
 	case strings.Contains(cb.Data, "tx_type_"):
-		return s.askTransactionPair(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, &sv.TempTransaction, cb.Data)
+		return s.askTransactionAsset(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, &sv.TempTransaction, cb.Data)
 
 	case cb.Data == "tx_confirm_transaction":
 		return s.transactionConfirmed(ctx, cb.Message.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, &sv.TempTransaction)
 
-	case strings.Contains(cb.Data, "tx_pair_chosen_"):
+	case strings.Contains(cb.Data, "tx_asset_chosen_"):
 		return s.askTransactionAssetAmount(cb.Message.Chat.ID, tgUserID, sv.BotMessageID, cb.Data, &sv.TempTransaction)
 
 	case strings.Contains(cb.Data, "tx_date_"):
@@ -138,7 +138,7 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message, sv *
 	case "waiting_for_new_portfolio_name":
 		return s.waitNewPortfolionName(ctx, msg.Chat.ID, tgUserID, dbUserID, sv.BotMessageID, sv.SelectedPortfolioName, msg.Text)
 
-	case "waiting_transaction_pair":
+	case "waiting_transaction_asset":
 		return s.askTransactionAssetAmount(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
 
 	case "waiting_transaction_asset_amount":
@@ -147,7 +147,6 @@ func (s *Service) handleMessage(ctx context.Context, msg *tgbotapi.Message, sv *
 	case "waiting_transaction_asset_price":
 		return s.askTransactionDate(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
 
-		// TODO investigee do i need this if i have callback
 	case "waiting_transaction_date":
 		return s.asktransactionConfirmation(msg.Chat.ID, tgUserID, sv.BotMessageID, msg.Text, &sv.TempTransaction)
 

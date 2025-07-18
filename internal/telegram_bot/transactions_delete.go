@@ -47,7 +47,7 @@ func (s *Service) gfTransactionsDelete(ctx context.Context, chatID, tgUserID, db
 		}
 
 		// FIXME: add tx id to callback and use it in gfDeleteTransactionConfirmed
-		txText := fmt.Sprintf("%s%s | %.8g %s | %.2f usd", typeEmoji, t.Type, t.AssetAmount, t.Pair, t.USDAmount)
+		txText := fmt.Sprintf("%s%s | %.8g %s | %.2f usd", typeEmoji, t.Type, t.AssetAmount, t.Asset, t.USDAmount)
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(txText, "gf_delete_transaction_confirmation_"+strconv.FormatInt(t.ID, 10)),
 		))

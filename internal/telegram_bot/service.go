@@ -16,10 +16,9 @@ type Service struct {
 	bot      *tgbotapi.BotAPI
 	store    *store.Store
 	sessions *SessionManager
-	cfg      *config.Config //FIXME
+	cfg      *config.Config
 }
 
-// FIXME
 func New(token string, db *store.Store, cfg *config.Config) (*Service, error) {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
@@ -30,7 +29,7 @@ func New(token string, db *store.Store, cfg *config.Config) (*Service, error) {
 		bot:      bot,
 		store:    db,
 		sessions: NewSessionManager(),
-		cfg:      cfg, //FIXME
+		cfg:      cfg,
 	}, nil
 }
 
@@ -77,12 +76,12 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) error {
-	// Add panic recovery to prevent service crashes
+	// add panic recovery to prevent service crashes
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error("panic recovered in handleUpdate", "panic", r, "stack", fmt.Sprintf("%+v", r))
 
-			// Try to send recovery message if we can identify the user
+			// try to send recovery message if we can identify the user
 			var chatID int64
 			var userID int64
 
@@ -95,7 +94,7 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 			}
 
 			if chatID != 0 && userID != 0 {
-				// Clear any existing session for this user
+				// clear any existing session for this user
 				s.sessions.clearSession(userID)
 
 				// Delete the problematic message if it's a callback
@@ -103,7 +102,7 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 					_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, update.CallbackQuery.Message.MessageID))
 				}
 
-				// Send recovery message
+				// send recovery message
 				recoveryMsg := tgbotapi.NewMessage(chatID,
 					"🔧 *Service Recovery*\n\n"+
 						"The service was recently restarted. Your previous session has been cleared.\n\n"+
@@ -128,19 +127,19 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 		return nil
 	}
 
-	// Get or create session - this ensures session exists
+	// get or create session - this ensures session exists
 	userSession, sessionExists := s.sessions.getSessionVars(tgUserID)
 
-	// If this is a callback query but no session exists, it means the service was restarted
+	// if this is a callback query but no session exists, it means the service was restarted
 	// and the user is clicking on an old button
 	if update.CallbackQuery != nil && !sessionExists {
 		chatID := update.CallbackQuery.Message.Chat.ID
 		messageID := update.CallbackQuery.Message.MessageID
 
-		// Delete the old message
+		// delete the old message
 		_, _ = s.bot.Request(tgbotapi.NewDeleteMessage(chatID, messageID))
 
-		// Send session expired message
+		// send session expired message
 		expiredMsg := tgbotapi.NewMessage(chatID,
 			"⚠️ *Session Expired*\n\n"+
 				"This button is from before the service restart. Please use the main menu below or enter /start.")
@@ -158,29 +157,16 @@ func (s *Service) handleUpdate(ctx context.Context, update tgbotapi.Update) erro
 	case update.Message != nil && update.Message.Text == "/start":
 		return s.handleStart(ctx, update.Message)
 
-	// case update.Message != nil && update.Message.Text == "jopa":
-	// 	mainMenu := tgbotapi.NewMessage(update.Message.Chat.ID, "Welcome back! What would you like to do?")
-	// 	mainMenu.ReplyMarkup = tgbotapi.NewReplyKeyboard(
-	// 		tgbotapi.NewKeyboardButtonRow(
-	// 			tgbotapi.NewKeyboardButton("Portfolios"),
-	// 			tgbotapi.NewKeyboardButton("New Portfolio"),
-	// 		),
-	// 		tgbotapi.NewKeyboardButtonRow(
-	// 			tgbotapi.NewKeyboardButton("Help"),
-	// 		),
-	// 	)
-	// 	return s.sendTemporaryMessage(mainMenu, update.Message.From.ID, 20*time.Second)
+	// case update.Message != nil && update.Message.Text == "qwe":
+	// 	resp := tgbotapi.NewMessage(update.Message.Chat.ID, "jopa")
+	// 	err := s.sendTgMessage(resp, update.Message.From.ID)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	p, _ := s.sessions.getSessionVars(update.Message.From.ID)
 
-	case update.Message != nil && update.Message.Text == "qwe":
-		resp := tgbotapi.NewMessage(update.Message.Chat.ID, "jopa")
-		err := s.sendTgMessage(resp, update.Message.From.ID)
-		if err != nil {
-			return err
-		}
-		p, _ := s.sessions.getSessionVars(update.Message.From.ID)
-
-		time.Sleep(3 * time.Second)
-		return s.sendTestMessage(update.Message.Chat.ID, p.BotMessageID, "test passed")
+	// 	time.Sleep(3 * time.Second)
+	// 	return s.sendTestMessage(update.Message.Chat.ID, p.BotMessageID, "test passed")
 
 	// catch any callback
 	case update.CallbackQuery != nil:
